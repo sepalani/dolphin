@@ -20,6 +20,7 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
+#include "Core/HLE/HLE_OS.h"
 #include "Core/HW/Sram.h"
 #include "Core/HW/SystemTimers.h"
 #include "Core/Movie.h"
@@ -340,7 +341,8 @@ void CEXIIPL::TransferByte(u8& _uByte)
 
         if (_uByte == '\r')
         {
-          NOTICE_LOG(OSREPORT, "%s", SHIFTJISToUTF8(m_buffer).c_str());
+          if (!StringBeginsWith(m_buffer, HLE_OS::GetLastOSReport()))
+            NOTICE_LOG(OSREPORT, "%s", SHIFTJISToUTF8(m_buffer).c_str());
           m_buffer.clear();
         }
       }

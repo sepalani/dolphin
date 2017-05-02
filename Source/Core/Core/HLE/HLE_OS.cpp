@@ -12,9 +12,19 @@
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/PowerPC.h"
 
+namespace
+{
+std::string s_last_os_report;
+}
+
 namespace HLE_OS
 {
 std::string GetStringVA(u32 strReg = 3);
+
+const std::string& GetLastOSReport()
+{
+  return s_last_os_report;
+}
 
 void HLE_OSPanic()
 {
@@ -62,6 +72,7 @@ void HLE_GeneralDebugPrint()
 
   NPC = LR;
 
+  s_last_os_report = report_message;
   NOTICE_LOG(OSREPORT, "%08x->%08x| %s", LR, PC, SHIFTJISToUTF8(report_message).c_str());
 }
 
@@ -72,6 +83,7 @@ void HLE_write_console()
 
   NPC = LR;
 
+  s_last_os_report = report_message;
   NOTICE_LOG(OSREPORT, "%08x->%08x| %s", LR, PC, SHIFTJISToUTF8(report_message).c_str());
 }
 
