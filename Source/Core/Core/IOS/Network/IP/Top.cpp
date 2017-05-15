@@ -55,6 +55,39 @@ typedef struct pollfd pollfd_t;
 #define UNSUPPORTED_WSAPOLL 0
 #endif
 
+namespace
+{
+using RoutingTableRow = struct
+{
+  u32 dest_ip;
+  u32 netmask;
+  u32 gateway;
+  u32 flags;
+  u64 tick;
+};
+using RoutingTable = std::vector<RoutingTableRow>;
+
+// TODO: Return the complete routing table
+RoutingTable GetRoutingTable()
+{
+  RoutingTable table;
+
+  // Add a default entry
+  // Destination IP: 127.0.0.1
+  // Network Mask: 255.255.255.0
+  // Gateway: 0.0.0.0
+  RoutingTableRow row;
+  row.dest_ip = 0x7F << 24 | 0x00 << 16 | 0x00 << 8 | 0x01;
+  row.netmask = 0xFF << 24 | 0xFF << 16 | 0xFF << 8 | 0x00;
+  row.gateway = 0x00 << 24 | 0x00 << 16 | 0x00 << 8 | 0x00;
+  row.flags = 0x300;
+  row.tick = 0;
+  table.emplace_back(std::move(row));
+
+  return table;
+}
+}
+
 namespace IOS
 {
 namespace HLE
@@ -822,6 +855,23 @@ IPCCommandResult NetIPTop::HandleGetInterfaceOptRequest(const IOCtlVRequest& req
   case 0x4005:  // hardcoded value
     Memory::Write_U32(0x20, request.io_vectors[0].address);
     break;
+
+  case 0x4006:  // routing table
+  {
+    RoutingTable table = GetRoutingTable();
+    Memory::Write_U32(static_cast<u32>(table.size()), request.io_vectors[1].address);
+    u32 address = request.io_vectors[0].address;
+    for (const RoutingTableRow& row : table)
+    {
+      Memory::Write_U32(row.dest_ip, address);
+      Memory::Write_U32(row.netmask, address + 4);
+      Memory::Write_U32(row.gateway, address + 8);
+      Memory::Write_U32(row.flags, address + 12);
+      Memory::Write_U64(row.tick, address + 16);
+      address += 24;
+    }
+  }
+  break;
 
   case 0x6003:  // hardcoded value
     Memory::Write_U32(0x80, request.io_vectors[0].address);
