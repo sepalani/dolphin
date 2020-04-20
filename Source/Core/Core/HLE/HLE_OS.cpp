@@ -266,4 +266,17 @@ std::string GetStringVA(u32 str_reg, ParameterType parameter_type)
   return result;
 }
 
+void HLE_bdLogMessage()
+{
+  const u32 log_type = GPR(3);
+  const std::string context = PowerPC::HostGetString(GPR(4));
+  const std::string scope_name = PowerPC::HostGetString(GPR(5));
+  const std::string file_name = PowerPC::HostGetString(GPR(6));
+  const std::string func_name = PowerPC::HostGetString(GPR(7));
+  const u32 file_line = GPR(8);
+  const std::string reason = GetStringVA(9);
+  NOTICE_LOG(OSREPORT, "[%d] %s%s(%d) [%s::%s]: %s", log_type, context.c_str(), file_name.c_str(),
+             file_line, scope_name.c_str(), func_name.c_str(), reason.c_str());
+}
+
 }  // end of namespace HLE_OS
