@@ -42,7 +42,7 @@ struct SPatch
 };
 
 // clang-format off
-constexpr std::array<SPatch, 23> OSPatches{{
+constexpr std::array<SPatch, 25> OSPatches{{
     // Placeholder, OSPatches[0] is the "non-existent function" index
     {"FAKE_TO_SKIP_0",               HLE_Misc::UnimplementedFunction,       HookType::Replace, HookFlag::Generic},
 
@@ -73,6 +73,8 @@ constexpr std::array<SPatch, 23> OSPatches{{
     
     {"bdLogMessage",                 HLE_OS::HLE_bdLogMessage,              HookType::Start,   HookFlag::Debug},
     {"bdPlatformLog::bdLogMessage",  HLE_OS::HLE_bdLogMessage,              HookType::Start,   HookFlag::Debug},
+    {"SOClose",                      HLE_OS::HLE_SOClose,                   HookType::Start,   HookFlag::Debug},
+    {"RecvFrom",                     HLE_OS::HLE_RecvFrom,                  HookType::Start,   HookFlag::Debug},
 
     {"GeckoCodehandler",             HLE_Misc::GeckoCodeHandlerICacheFlush, HookType::Start,   HookFlag::Fixed},
     {"GeckoHandlerReturnTrampoline", HLE_Misc::GeckoReturnTrampoline,       HookType::Replace, HookFlag::Fixed},

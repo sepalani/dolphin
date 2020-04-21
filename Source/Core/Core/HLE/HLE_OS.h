@@ -15,4 +15,6 @@ void HLE_LogVDPrint();
 void HLE_LogFPrint();
 void HLE_LogVFPrint();
 void HLE_bdLogMessage();
+void HLE_RecvFrom();
+void HLE_SOClose();
 }  // namespace HLE_OS

@@ -279,4 +279,17 @@ void HLE_bdLogMessage()
              file_line, scope_name.c_str(), func_name.c_str(), reason.c_str());
 }
 
+void HLE_RecvFrom()
+{
+  const u32 current_thread = PowerPC::Read_U32(0x800000E4);
+  NOTICE_LOG(OSREPORT, "[%08x] RecvFrom(fd=%08x, buf=%08x, len=%08x, flags=%08x)", current_thread,
+             GPR(4), GPR(5), GPR(6), GPR(7));
+}
+
+void HLE_SOClose()
+{
+  const u32 current_thread = PowerPC::Read_U32(0x800000E4);
+  NOTICE_LOG(OSREPORT, "[%08x] SOClose(fd=%08x)", current_thread, GPR(3));
+}
+
 }  // end of namespace HLE_OS
