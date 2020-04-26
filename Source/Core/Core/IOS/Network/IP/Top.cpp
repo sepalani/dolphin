@@ -128,14 +128,53 @@ static int inet_pton(const char* src, unsigned char* dst)
   return 1;
 }
 
-// Maps SOCKOPT level from Wii to native
-static s32 MapWiiSockOptLevelToNative(u32 level)
+static s32 MapWiiIpOptNameToNative(u32 optname)
 {
-  if (level == 0xFFFF)
-    return SOL_SOCKET;
+  switch (optname)
+  {
+    // TODO
+  case 0x07:  // Get/Set
+  case 0x08:  // Get/Set
+  case 0x09:  // Get/Set
+  case 0x0a:  // Get/Set
+  case 0x0b:  // Set
+  case 0x0c:  // Set
+  default:
+    INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown IP optname %u", optname);
+    return optname;
+  }
+}
 
-  INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown level %u", level);
-  return level;
+static s32 MapWiiTcpOptNameToNative(u32 optname)
+{
+  switch (optname)
+  {
+    // TODO
+  case 0x2001:  // Get/Set
+  case 0x2002:  // Get/Set
+  case 0x2003:  // Get/Set
+  case 0x2004:  // Get/Set
+  case 0x2005:  // Get/Set
+  default:
+    INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown TCP optname %u", optname);
+    return optname;
+  }
+}
+
+static s32 MapWiiIpv6OptNameToNative(u32 optname)
+{
+  switch (optname)
+  {
+    // TODO
+  case 0x04:  // Get/Set
+  case 0x0a:  // Get/Set
+  case 0x0b:  // Get/Set
+  case 0x0c:  // Set
+  case 0x0d:  // Set
+  default:
+    INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown IPv6 optname %u", optname);
+    return optname;
+  }
 }
 
 // Maps SOCKOPT optname from native to Wii
@@ -143,18 +182,45 @@ static s32 MapWiiSockOptNameToNative(u32 optname)
 {
   switch (optname)
   {
-  case 0x4:
+  case 0x4:  // Get/Set
     return SO_REUSEADDR;
-  case 0x1001:
+  case 0x80:  // Get/Set
+    return SO_LINGER;
+  case 0x100:  // Get
+    return SO_OOBINLINE;
+  case 0x1001:  // Get/Set
     return SO_SNDBUF;
-  case 0x1002:
+  case 0x1002:  // Get/Set
     return SO_RCVBUF;
-  case 0x1009:
+  case 0x1009:  // Get
     return SO_ERROR;
-  }
 
-  INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown optname %u", optname);
-  return optname;
+    // TODO
+  case 0x1003:  // Get
+  case 0x1004:  // Get
+  case 0x1008:  // Get
+  default:
+    INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown optname %u", optname);
+    return optname;
+  }
+}
+
+static std::pair<s32, s32> MapWiiSockOptParameters(u32 level, u32 optname)
+{
+  switch (level)
+  {
+  case 0x00:
+    return std::make_pair(IPPROTO_IP, MapWiiIpOptNameToNative(optname));
+  case 0x06:
+    return std::make_pair(IPPROTO_TCP, MapWiiTcpOptNameToNative(optname));
+  case 0x29:
+    return std::make_pair(IPPROTO_IPV6, MapWiiIpv6OptNameToNative(optname));
+  case 0xffff:
+    return std::make_pair(SOL_SOCKET, MapWiiSockOptNameToNative(optname));
+  default:
+    INFO_LOG(IOS_NET, "SO_SETSOCKOPT: unknown level %u", level);
+    return std::make_pair(level, optname);
+  }
 }
 
 struct DefaultInterface
@@ -432,8 +498,8 @@ IPCCommandResult NetIPTop::HandleGetSockOptRequest(const IOCtlRequest& request)
   request.Log(GetDeviceName(), Common::Log::IOS_WC24);
 
   // Do the level/optname translation
-  int nat_level = MapWiiSockOptLevelToNative(level);
-  int nat_optname = MapWiiSockOptNameToNative(optname);
+  int nat_level, nat_optname;
+  std::tie(nat_level, nat_optname) = MapWiiSockOptParameters(level, optname);
 
   u8 optval[20];
   u32 optlen = 4;
@@ -483,8 +549,8 @@ IPCCommandResult NetIPTop::HandleSetSockOptRequest(const IOCtlRequest& request)
     return GetDefaultReply(0);
 
   // Do the level/optname translation
-  int nat_level = MapWiiSockOptLevelToNative(level);
-  int nat_optname = MapWiiSockOptNameToNative(optname);
+  int nat_level, nat_optname;
+  std::tie(nat_level, nat_optname) = MapWiiSockOptParameters(level, optname);
 
   int ret = setsockopt(WiiSockMan::GetInstance().GetHostSocket(fd), nat_level, nat_optname,
                        (char*)optval, optlen);
