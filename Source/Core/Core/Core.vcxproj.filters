@@ -1740,6 +1740,7 @@
     <ClInclude Include="PowerPC\JitArmCommon\BackPatch.h">
       <Filter>PowerPC\JitArmCommon</Filter>
     </ClInclude>
+    <ClInclude Include="Globals.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
