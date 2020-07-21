@@ -25,7 +25,8 @@ using namespace PowerPC;
 
 typedef void (*TPatchFunction)();
 
-static std::map<u32, u32> s_original_instructions;
+// List of pair<address, hook_id>
+std::map<u32, u32> s_original_instructions{};
 
 struct SPatch
 {
@@ -207,10 +208,22 @@ HookFlag GetFunctionFlagsByIndex(u32 index)
   return OSPatches[index].flags;
 }
 
+std::string_view GetFunctionNameByIndex(u32 index)
+{
+  if (index >= std::size(OSPatches))
+    return {};
+  return OSPatches[index].m_szPatchName;
+}
+
 bool IsEnabled(HookFlag flag)
 {
   return flag != HLE::HookFlag::Debug || SConfig::GetInstance().bEnableDebugging ||
          PowerPC::GetMode() == PowerPC::CoreMode::Interpreter;
+}
+
+const std::map<u32, u32>& GetHookedInstructions()
+{
+  return s_original_instructions;
 }
 
 u32 UnPatch(std::string_view patch_name)

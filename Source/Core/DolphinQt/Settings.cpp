@@ -456,6 +456,20 @@ bool Settings::IsNetworkVisible() const
   return GetQSettings().value(QStringLiteral("debugger/shownetwork")).toBool();
 }
 
+void Settings::SetHLEHooksVisible(bool enabled)
+{
+  if (IsHLEHooksVisible() == enabled)
+    return;
+
+  GetQSettings().setValue(QStringLiteral("debugger/showhlehooks"), enabled);
+  emit HLEHooksVisibilityChanged(enabled);
+}
+
+bool Settings::IsHLEHooksVisible() const
+{
+  return GetQSettings().value(QStringLiteral("debugger/showhlehooks")).toBool();
+}
+
 void Settings::SetJITVisible(bool enabled)
 {
   if (IsJITVisible() == enabled)

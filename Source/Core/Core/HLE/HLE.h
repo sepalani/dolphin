@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <string>
 #include <string_view>
 
 #include "Common/CommonTypes.h"
@@ -40,6 +41,7 @@ u32 GetFunctionIndex(u32 address);
 u32 GetFirstFunctionIndex(u32 address);
 HookType GetFunctionTypeByIndex(u32 index);
 HookFlag GetFunctionFlagsByIndex(u32 index);
+std::string_view GetFunctionNameByIndex(u32 index);
 
 bool IsEnabled(HookFlag flag);
 
@@ -71,4 +73,6 @@ bool ReplaceFunctionIfPossible(u32 address, FunctionObject fn)
 
   return fn(function, type);
 }
+
+const std::map<u32, u32>& GetHookedInstructions();
 }  // namespace HLE

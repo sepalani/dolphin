@@ -26,6 +26,7 @@ class GameList;
 class GCTASInputWindow;
 class GraphicsWindow;
 class HotkeyScheduler;
+class HLEHooksWidget;
 class JITWidget;
 class LogConfigWidget;
 class LogWidget;
@@ -223,6 +224,7 @@ private:
 
   BreakpointWidget* m_breakpoint_widget;
   CodeWidget* m_code_widget;
+  HLEHooksWidget* m_hle_hooks_widget;
   JITWidget* m_jit_widget;
   LogWidget* m_log_widget;
   LogConfigWidget* m_log_config_widget;

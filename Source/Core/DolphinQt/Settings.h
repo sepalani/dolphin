@@ -130,6 +130,8 @@ public:
   bool IsMemoryVisible() const;
   void SetNetworkVisible(bool enabled);
   bool IsNetworkVisible() const;
+  void SetHLEHooksVisible(bool enabled);
+  bool IsHLEHooksVisible() const;
   void SetJITVisible(bool enabled);
   bool IsJITVisible() const;
   QFont GetDebugFont() const;
@@ -174,6 +176,7 @@ signals:
   void CodeVisibilityChanged(bool visible);
   void MemoryVisibilityChanged(bool visible);
   void NetworkVisibilityChanged(bool visible);
+  void HLEHooksVisibilityChanged(bool visible);
   void JITVisibilityChanged(bool visible);
   void DebugModeToggled(bool enabled);
   void DebugFontChanged(QFont font);

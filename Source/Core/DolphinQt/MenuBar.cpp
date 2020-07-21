@@ -174,6 +174,7 @@ void MenuBar::OnDebugModeToggled(bool enabled)
   m_show_breakpoints->setVisible(enabled);
   m_show_memory->setVisible(enabled);
   m_show_network->setVisible(enabled);
+  m_show_hle_hooks->setVisible(enabled);
   m_show_jit->setVisible(enabled);
 
   if (enabled)
@@ -488,6 +489,14 @@ void MenuBar::AddViewMenu()
 
   connect(m_show_network, &QAction::toggled, &Settings::Instance(), &Settings::SetNetworkVisible);
   connect(&Settings::Instance(), &Settings::NetworkVisibilityChanged, m_show_network,
+          &QAction::setChecked);
+
+  m_show_hle_hooks = view_menu->addAction(tr("HLE hooks"));
+  m_show_hle_hooks->setCheckable(true);
+  m_show_hle_hooks->setChecked(Settings::Instance().IsHLEHooksVisible());
+
+  connect(m_show_hle_hooks, &QAction::toggled, &Settings::Instance(), &Settings::SetHLEHooksVisible);
+  connect(&Settings::Instance(), &Settings::HLEHooksVisibilityChanged, m_show_hle_hooks,
           &QAction::setChecked);
 
   m_show_jit = view_menu->addAction(tr("&JIT"));

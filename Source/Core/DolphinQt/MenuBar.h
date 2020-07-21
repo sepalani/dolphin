@@ -238,6 +238,7 @@ private:
   QAction* m_show_breakpoints;
   QAction* m_show_memory;
   QAction* m_show_network;
+  QAction* m_show_hle_hooks;
   QAction* m_show_jit;
   QMenu* m_cols_menu;
 
