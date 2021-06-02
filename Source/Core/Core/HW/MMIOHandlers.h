@@ -109,6 +109,20 @@ public:
   virtual void VisitComplex(const std::function<void(u32, T)>* lambda) = 0;
 };
 
+class CyclesTiming
+{
+public:
+  s64 GetCycles() const;
+  s64 GetDefaultCycles() const;
+  void SetCycles(s64 cycles);
+  void SetDefaultCycles(s64 cycles);
+  void UpdateDowncount();
+
+private:
+  s64 m_cycles = 0;
+  s64 m_default_cycles = 0;
+};
+
 // These classes are INTERNAL. Do not use outside of the MMIO implementation
 // code. Unfortunately, because we want to make Read() and Write() fast and
 // inlinable, we need to provide some of the implementation of these two
@@ -127,20 +141,11 @@ public:
   // Entry point for read handling method visitors.
   void Visit(ReadHandlingMethodVisitor<T>& visitor);
 
-  T Read(u32 addr)
-  {
-    // Check if the handler has already been initialized. For real
-    // handlers, this will always be the case, so this branch should be
-    // easily predictable.
-    if (!m_Method)
-      InitializeInvalid();
-
-    return m_ReadFunc(addr);
-  }
+  T Read(u32 addr);
 
   // Internal method called when changing the internal method object. Its
   // main role is to make sure the read function is updated at the same time.
-  void ResetMethod(ReadHandlingMethod<T>* method);
+  void ResetMethod(ReadHandlingMethod<T>* method, s64 cycles = 0);
 
 private:
   // Initialize this handler to an invalid handler. Done lazily to avoid
@@ -162,22 +167,12 @@ public:
 
   // Entry point for write handling method visitors.
   void Visit(WriteHandlingMethodVisitor<T>& visitor);
-
-  void Write(u32 addr, T val)
-  {
-    // Check if the handler has already been initialized. For real
-    // handlers, this will always be the case, so this branch should be
-    // easily predictable.
-    if (!m_Method)
-      InitializeInvalid();
-
-    m_WriteFunc(addr, val);
-  }
+  void Write(u32 addr, T val);
 
   // Internal method called when changing the internal method object. Its
   // main role is to make sure the write function is updated at the same
   // time.
-  void ResetMethod(WriteHandlingMethod<T>* method);
+  void ResetMethod(WriteHandlingMethod<T>* method, s64 cycles = 0);
 
 private:
   // Initialize this handler to an invalid handler. Done lazily to avoid

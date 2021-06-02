@@ -166,6 +166,7 @@ int Interpreter::SingleStepInner()
 
   NPC = PC + sizeof(UGeckoInstruction);
   m_prev_inst.hex = PowerPC::Read_Opcode(PC);
+  const int prev_downcount = PowerPC::ppcState.downcount;
 
   // Uncomment to trace the interpreter
   // if ((PC & 0xffffff)>=0x0ab54c && (PC & 0xffffff)<=0x0ab624)
@@ -220,7 +221,8 @@ int Interpreter::SingleStepInner()
   UpdatePC();
 
   const GekkoOPInfo* opinfo = PPCTables::GetOpInfo(m_prev_inst);
-  PowerPC::UpdatePerformanceMonitor(opinfo->numCycles, (opinfo->flags & FL_LOADSTORE) != 0,
+  const int cycles = prev_downcount - PowerPC::ppcState.downcount + opinfo->numCycles;
+  PowerPC::UpdatePerformanceMonitor(cycles, (opinfo->flags & FL_LOADSTORE) != 0,
                                     (opinfo->flags & FL_USE_FPU) != 0);
   return opinfo->numCycles;
 }

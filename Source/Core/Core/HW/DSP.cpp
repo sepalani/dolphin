@@ -272,10 +272,12 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
   };
   for (auto& mapped_var : directly_mapped_vars)
   {
+    const s64 read_cycles = mapped_var.addr == AUDIO_DMA_START_LO ? 32 : 0;
     mmio->Register(base | mapped_var.addr, MMIO::DirectRead<u16>(mapped_var.ptr),
                    mapped_var.wmask != WMASK_NONE ?
                        MMIO::DirectWrite<u16>(mapped_var.ptr, mapped_var.wmask) :
-                       MMIO::InvalidWrite<u16>());
+                       MMIO::InvalidWrite<u16>(),
+                   read_cycles);
   }
 
   // DSP mail MMIOs call DSP emulator functions to get results or write data.
@@ -356,7 +358,8 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
         }
 
         UpdateInterrupts();
-      }));
+      }),
+      32);
 
   // ARAM MMIO controlling the DMA start.
   mmio->Register(base | AR_DMA_CNT_L, MMIO::DirectRead<u16>(MMIO::Utils::LowPart(&s_arDMA.Cnt.Hex)),
@@ -371,7 +374,8 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
                    *MMIO::Utils::HighPart(&s_audioDMA.SourceAddress) =
                        val & (SConfig::GetInstance().bWii ? WMASK_AUDIO_HI_RESTRICT_WII :
                                                             WMASK_AUDIO_HI_RESTRICT_GCN);
-                 }));
+                 }),
+                 32);
 
   // Audio DMA MMIO controlling the DMA start.
   mmio->Register(
@@ -400,7 +404,8 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
           // Other Namco games crash too, see issue 9509. For now we will just push it to 200 cycles
           CoreTiming::ScheduleEvent(200, s_et_GenerateDSPInterrupt, INT_AID);
         }
-      }));
+      }),
+      32);
 
   // Audio DMA blocks remaining is invalid to write to, and requires logic on
   // the read side.

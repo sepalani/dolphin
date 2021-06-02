@@ -231,13 +231,15 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
         }
 
         UpdateInterrupts();
-      }));
+      }),
+      113);
 
   mmio->Register(base | AI_VOLUME_REGISTER, MMIO::DirectRead<u32>(&s_volume.hex),
                  MMIO::ComplexWrite<u32>([](u32, u32 val) {
                    s_volume.hex = val;
                    g_sound_stream->GetMixer()->SetStreamingVolume(s_volume.left, s_volume.right);
-                 }));
+                 }),
+                 113);
 
   mmio->Register(base | AI_SAMPLE_COUNTER, MMIO::ComplexRead<u32>([](u32) {
                    return s_sample_counter +
@@ -249,7 +251,8 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
                    s_last_cpu_time = CoreTiming::GetTicks();
                    CoreTiming::RemoveEvent(event_type_ai);
                    CoreTiming::ScheduleEvent(GetAIPeriod(), event_type_ai);
-                 }));
+                 }),
+                 113);
 
   mmio->Register(base | AI_INTERRUPT_TIMING, MMIO::DirectRead<u32>(&s_interrupt_timing),
                  MMIO::ComplexWrite<u32>([](u32, u32 val) {
@@ -258,7 +261,8 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
                    s_interrupt_timing = val;
                    CoreTiming::RemoveEvent(event_type_ai);
                    CoreTiming::ScheduleEvent(GetAIPeriod(), event_type_ai);
-                 }));
+                 }),
+                 113);
 }
 
 static void UpdateInterrupts()

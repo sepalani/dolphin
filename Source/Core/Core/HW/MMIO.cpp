@@ -9,6 +9,7 @@
 #include "Common/Assert.h"
 #include "Common/CommonTypes.h"
 #include "Core/HW/MMIOHandlers.h"
+#include "Core/PowerPC/PowerPC.h"
 
 namespace MMIO
 {
@@ -18,14 +19,14 @@ namespace MMIO
 // At the moment the only common element between all the handling method is
 // that they should be able to accept a visitor of the appropriate type.
 template <typename T>
-class ReadHandlingMethod
+class ReadHandlingMethod : public CyclesTiming
 {
 public:
   virtual ~ReadHandlingMethod() = default;
   virtual void AcceptReadVisitor(ReadHandlingMethodVisitor<T>& v) const = 0;
 };
 template <typename T>
-class WriteHandlingMethod
+class WriteHandlingMethod : public CyclesTiming
 {
 public:
   virtual ~WriteHandlingMethod() = default;
@@ -291,8 +292,24 @@ void ReadHandler<T>::Visit(ReadHandlingMethodVisitor<T>& visitor)
 }
 
 template <typename T>
-void ReadHandler<T>::ResetMethod(ReadHandlingMethod<T>* method)
+T ReadHandler<T>::Read(u32 addr)
 {
+  // Check if the handler has already been initialized. For real
+  // handlers, this will always be the case, so this branch should be
+  // easily predictable.
+  if (!m_Method)
+    InitializeInvalid();
+
+  m_Method->SetCycles(m_Method->GetDefaultCycles());
+  const T result = m_ReadFunc(addr);
+  m_Method->UpdateDowncount();
+  return result;
+}
+
+template <typename T>
+void ReadHandler<T>::ResetMethod(ReadHandlingMethod<T>* method, s64 cycles)
+{
+  method->SetDefaultCycles(cycles);
   m_Method.reset(method);
 
   struct FuncCreatorVisitor : public ReadHandlingMethodVisitor<T>
@@ -345,8 +362,23 @@ void WriteHandler<T>::Visit(WriteHandlingMethodVisitor<T>& visitor)
 }
 
 template <typename T>
-void WriteHandler<T>::ResetMethod(WriteHandlingMethod<T>* method)
+void WriteHandler<T>::Write(u32 addr, T val)
 {
+  // Check if the handler has already been initialized. For real
+  // handlers, this will always be the case, so this branch should be
+  // easily predictable.
+  if (!m_Method)
+    InitializeInvalid();
+
+  m_Method.get()->SetCycles(m_Method.get()->GetDefaultCycles());
+  m_WriteFunc(addr, val);
+  m_Method.get()->UpdateDowncount();
+}
+
+template <typename T>
+void WriteHandler<T>::ResetMethod(WriteHandlingMethod<T>* method, s64 cycles)
+{
+  method->SetDefaultCycles(cycles);
   m_Method.reset(method);
 
   struct FuncCreatorVisitor : public WriteHandlingMethodVisitor<T>
@@ -371,6 +403,31 @@ void WriteHandler<T>::ResetMethod(WriteHandlingMethod<T>* method)
   FuncCreatorVisitor v;
   Visit(v);
   m_WriteFunc = v.ret;
+}
+
+s64 CyclesTiming::GetCycles() const
+{
+  return m_cycles;
+}
+
+s64 CyclesTiming::GetDefaultCycles() const
+{
+  return m_default_cycles;
+}
+
+void CyclesTiming::SetCycles(s64 cycles)
+{
+  m_cycles = cycles;
+}
+
+void CyclesTiming::SetDefaultCycles(s64 cycles)
+{
+  m_default_cycles = cycles;
+}
+
+void CyclesTiming::UpdateDowncount()
+{
+  PowerPC::ppcState.downcount -= m_cycles;
 }
 
 // Define all the public specializations that are exported in MMIOHandlers.h.

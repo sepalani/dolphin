@@ -105,22 +105,23 @@ public:
   // Example usages can be found in just about any HW/ module in Dolphin's
   // codebase.
   template <typename Unit>
-  void RegisterRead(u32 addr, ReadHandlingMethod<Unit>* read)
+  void RegisterRead(u32 addr, ReadHandlingMethod<Unit>* read, s64 cycles = 0)
   {
-    GetHandlerForRead<Unit>(addr).ResetMethod(read);
+    GetHandlerForRead<Unit>(addr).ResetMethod(read, cycles);
   }
 
   template <typename Unit>
-  void RegisterWrite(u32 addr, WriteHandlingMethod<Unit>* write)
+  void RegisterWrite(u32 addr, WriteHandlingMethod<Unit>* write, s64 cycles = 0)
   {
-    GetHandlerForWrite<Unit>(addr).ResetMethod(write);
+    GetHandlerForWrite<Unit>(addr).ResetMethod(write, cycles);
   }
 
   template <typename Unit>
-  void Register(u32 addr, ReadHandlingMethod<Unit>* read, WriteHandlingMethod<Unit>* write)
+  void Register(u32 addr, ReadHandlingMethod<Unit>* read, WriteHandlingMethod<Unit>* write,
+                s64 read_cycles = 0, s64 write_cycles = 0)
   {
-    RegisterRead(addr, read);
-    RegisterWrite(addr, write);
+    RegisterRead(addr, read, read_cycles);
+    RegisterWrite(addr, write, write_cycles);
   }
 
   // Direct read/write interface.
