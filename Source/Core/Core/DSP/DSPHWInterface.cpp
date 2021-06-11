@@ -59,11 +59,10 @@ u16 SDSP::ReadMailboxHigh(Mailbox mailbox)
 {
   if (m_dsp_core.GetInitHax() && mailbox == Mailbox::DSP)
   {
-    return 0x8054;
+    return 0x8054;// & ~0x8000;
   }
 
-  // TODO: mask away the top bit?
-  return static_cast<u16>(PeekMailbox(mailbox) >> 16);
+  return static_cast<u16>(PeekMailbox(mailbox) >> 16);  // & ~0x8000;
 }
 
 void SDSP::WriteMailboxLow(Mailbox mailbox, u16 value)

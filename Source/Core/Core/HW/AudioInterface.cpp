@@ -141,7 +141,7 @@ static CoreTiming::EventType* event_type_ai;
 void Init()
 {
   s_control.hex = 0;
-  s_control.AISFR = AIS_48KHz;
+  s_control.AISFR = AIS_32KHz;
   s_control.AIDFR = AID_32KHz;
   s_volume.hex = 0;
   s_sample_counter = 0;
@@ -241,9 +241,11 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
                  }));
 
   mmio->Register(base | AI_SAMPLE_COUNTER, MMIO::ComplexRead<u32>([](u32) {
+                   const bool is_streaming = s_control.PSTAT == 1;
+                   const u64 cycles_streamed =
+                       is_streaming ? (CoreTiming::GetTicks() - s_last_cpu_time) : s_last_cpu_time;
                    return s_sample_counter +
-                          static_cast<u32>((CoreTiming::GetTicks() - s_last_cpu_time) /
-                                           s_cpu_cycles_per_sample);
+                          static_cast<u32>(cycles_streamed / s_cpu_cycles_per_sample);
                  }),
                  MMIO::ComplexWrite<u32>([](u32, u32 val) {
                    s_sample_counter = val;
@@ -286,7 +288,7 @@ static void IncreaseSampleCount(const u32 amount)
     const u32 old_sample_counter = s_sample_counter + 1;
     s_sample_counter += amount;
 
-    if ((s_interrupt_timing - old_sample_counter) <= (s_sample_counter - old_sample_counter))
+    if (s_interrupt_timing <= s_sample_counter)
     {
       DEBUG_LOG_FMT(AUDIO_INTERFACE,
                     "GenerateAudioInterrupt {:08x}:{:08x} at PC {:08x} s_control.AIINTVLD={}",
@@ -338,10 +340,10 @@ static void Update(u64 userdata, s64 cycles_late)
 
 int GetAIPeriod()
 {
-  u64 period = s_cpu_cycles_per_sample * (s_interrupt_timing - s_sample_counter);
-  u64 s_period = s_cpu_cycles_per_sample * s_ais_sample_rate;
-  if (period == 0)
+  const u64 s_period = s_cpu_cycles_per_sample * s_ais_sample_rate;
+  if (s_interrupt_timing < s_sample_counter)
     return static_cast<int>(s_period);
+  const u64 period = s_cpu_cycles_per_sample * (s_interrupt_timing - s_sample_counter);
   return static_cast<int>(std::min(period, s_period));
 }
 

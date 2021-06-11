@@ -214,7 +214,8 @@ void Reinit(bool hle)
 
   s_ARAM_Info.Hex = 0;
   s_AR_MODE = 1;       // ARAM Controller has init'd
-  s_AR_REFRESH = 156;  // 156MHz
+  // s_AR_REFRESH = 156;  // 156MHz
+  s_AR_REFRESH = 96;  // 96MHz
 }
 
 void Shutdown()

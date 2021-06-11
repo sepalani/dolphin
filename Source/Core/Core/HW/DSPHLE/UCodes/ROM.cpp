@@ -35,7 +35,8 @@ ROMUCode::~ROMUCode()
 void ROMUCode::Initialize()
 {
   m_mail_handler.Clear();
-  m_mail_handler.PushMail(0x8071FEED);
+  // m_mail_handler.PushMail(0x8071FEED);
+  m_mail_handler.PushMail(0x80544348);
 }
 
 void ROMUCode::Update()
