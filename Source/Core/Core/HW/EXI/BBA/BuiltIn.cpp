@@ -96,7 +96,7 @@ bool CEXIETHERNET::BuiltInBBAInterface::IsActivated()
   return m_active;
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::WriteToQueue(const u8* data, int length)
+void CEXIETHERNET::BuiltInBBAInterface::WriteToQueue(const u8* data, std::size_t length)
 {
   m_queue_data[m_queue_write].resize(length);
   std::memcpy(m_queue_data[m_queue_write].data(), data, length);
@@ -107,9 +107,9 @@ void CEXIETHERNET::BuiltInBBAInterface::WriteToQueue(const u8* data, int length)
   m_queue_write = (m_queue_write + 1) & 15;
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::HandleARP(Common::EthernetHeader* hwdata,
-                                                  Common::ARPHeader* arpdata)
+void CEXIETHERNET::BuiltInBBAInterface::HandleARP(const Common::ARPPacket& packet)
 {
+  const auto& [hwdata, arpdata] = packet;
   std::vector<u8> in_frame;
   in_frame.resize(0x2a);
   Common::EthernetHeader* hwpart = (Common::EthernetHeader*)in_frame.data();
@@ -119,23 +119,23 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleARP(Common::EthernetHeader* hwdata
 
   Common::ARPHeader* arppart = (Common::ARPHeader*)&in_frame.at(14);
   Common::MACAddress bba_mac = *(Common::MACAddress*)&m_eth_ref->mBbaMem[BBA_NAFR_PAR0];
-  if (arpdata->target_ip == m_current_ip)
+  if (arpdata.target_ip == m_current_ip)
   {
     // game asked for himself, reply with his mac address
-    *arppart = Common::ARPHeader(arpdata->target_ip, bba_mac, m_current_ip, bba_mac);
+    *arppart = Common::ARPHeader(arpdata.target_ip, bba_mac, m_current_ip, bba_mac);
   }
   else
   {
-    *arppart = Common::ARPHeader(arpdata->target_ip, m_fake_mac, m_current_ip, bba_mac);
+    *arppart = Common::ARPHeader(arpdata.target_ip, m_fake_mac, m_current_ip, bba_mac);
   }
 
-  WriteToQueue(in_frame.data(), (int)in_frame.size());
+  WriteToQueue(in_frame.data(), in_frame.size());
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::HandleDHCP(Common::EthernetHeader* hwdata,
-                                                   Common::UDPHeader* udpdata,
-                                                   Common::DHCPBody* request)
+void CEXIETHERNET::BuiltInBBAInterface::HandleDHCP(const Common::UDPPacket& packet,
+                                                   const Common::DHCPBody& request)
 {
+  const auto& [hwdata, ip, udpdata] = packet;
   std::vector<u8> in_frame;
   in_frame.reserve(Common::DHCPBody::SIZE + 0x2a);
   in_frame.resize(0x156);
@@ -153,7 +153,7 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleDHCP(Common::EthernetHeader* hwdat
   from.sin_port = htons(67);
   to.sin_addr.s_addr = m_current_ip;
   to.sin_family = IPPROTO_UDP;
-  to.sin_port = udpdata->source_port;
+  to.sin_port = udpdata.source_port;
   const std::vector<u8> ip_part = {((u8*)&m_router_ip)[0], ((u8*)&m_router_ip)[1],
                                    ((u8*)&m_router_ip)[2], ((u8*)&m_router_ip)[3]};
 
@@ -161,12 +161,12 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleDHCP(Common::EthernetHeader* hwdat
 
   *udppart = Common::UDPHeader(from, to, 300);
 
-  *reply = Common::DHCPBody(request->transaction_id,
+  *reply = Common::DHCPBody(request.transaction_id,
                             *(Common::MACAddress*)&m_eth_ref->mBbaMem[BBA_NAFR_PAR0], m_current_ip,
                             m_router_ip);
 
   // options
-  request->options[2] == 1 ? reply->AddDHCPOption(1, 53, std::vector<u8>{2}) :
+  request.options[2] == 1 ? reply->AddDHCPOption(1, 53, std::vector<u8>{2}) :
                              reply->AddDHCPOption(1, 53, std::vector<u8>{5});
   reply->AddDHCPOption(4, 54, ip_part);                            // dhcp server ip
   reply->AddDHCPOption(4, 51, std::vector<u8>{0, 1, 0x51, 0x80});  // lease time 24h
@@ -182,7 +182,7 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleDHCP(Common::EthernetHeader* hwdat
 
   udppart->checksum = Common::ComputeTCPNetworkChecksum(from, to, udppart, 308, IPPROTO_UDP);
 
-  WriteToQueue(in_frame.data(), (int)in_frame.size());
+  WriteToQueue(in_frame.data(), in_frame.size());
 }
 
 StackRef* CEXIETHERNET::BuiltInBBAInterface::GetAvailableSlot(u16 port)
@@ -250,25 +250,24 @@ std::vector<u8> BuildAckFrame(StackRef* ref)
   return buf;
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(Common::EthernetHeader* hwdata,
-                                                       Common::IPv4Header* ipdata,
-                                                       Common::TCPHeader* tcpdata, u8* data)
+void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(const Common::TCPPacket& packet, const std::vector<u8>& data)
 {
+  const auto& [hwdata, ipdata, tcpdata] = packet;
   sf::IpAddress target;
-  StackRef* ref = GetTCPSlot(tcpdata->source_port, tcpdata->destination_port,
-                             Common::BitCast<u32>(ipdata->destination_addr));
-  if (tcpdata->properties & (TCP_FLAG_FIN | TCP_FLAG_RST))
+  StackRef* ref = GetTCPSlot(tcpdata.source_port, tcpdata.destination_port,
+                             Common::BitCast<u32>(ipdata.destination_addr));
+  if (tcpdata.properties & (TCP_FLAG_FIN | TCP_FLAG_RST))  // TODO: Fix endianness issues
   {
     if (ref == nullptr)
       return;  // not found
 
     ref->ack_num++;
     const std::vector<u8> buf = BuildFINFrame(ref);
-    WriteToQueue(buf.data(), (int)buf.size());
+    WriteToQueue(buf.data(), buf.size());
     ref->ip = 0;
     ref->tcp_socket.disconnect();
   }
-  else if (tcpdata->properties & TCP_FLAG_SIN)
+  else if (tcpdata.properties & TCP_FLAG_SIN)
   {
     // new connection
     if (ref != nullptr)
@@ -276,19 +275,19 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(Common::EthernetHeader* h
     ref = GetAvailableSlot(0);
 
     ref->delay = GetTickCountStd();
-    ref->local = tcpdata->source_port;
-    ref->remote = tcpdata->destination_port;
-    ref->ack_num = htonl(tcpdata->sequence_number) + 1;
+    ref->local = tcpdata.source_port;
+    ref->remote = tcpdata.destination_port;
+    ref->ack_num = htonl(tcpdata.sequence_number) + 1;
     ref->ack_base = ref->ack_num;
     ref->seq_num = 0x1000000;
-    ref->window_size = htons(tcpdata->window_size);
+    ref->window_size = htons(tcpdata.window_size);
     ref->type = IPPROTO_TCP;
     for (auto& tcp_buf : ref->tcp_buffers)
       tcp_buf.used = false;
-    ref->from.sin_addr.s_addr = Common::BitCast<u32>(ipdata->destination_addr);
-    ref->from.sin_port = tcpdata->destination_port;
-    ref->to.sin_addr.s_addr = Common::BitCast<u32>(ipdata->source_addr);
-    ref->to.sin_port = tcpdata->source_port;
+    ref->from.sin_addr.s_addr = Common::BitCast<u32>(ipdata.destination_addr);
+    ref->from.sin_port = tcpdata.destination_port;
+    ref->to.sin_addr.s_addr = Common::BitCast<u32>(ipdata.source_addr);
+    ref->to.sin_port = tcpdata.source_port;
     ref->bba_mac = *(Common::MACAddress*)&m_eth_ref->mBbaMem[BBA_NAFR_PAR0];
     ref->my_mac = m_fake_mac;
     ref->tcp_socket.setBlocking(false);
@@ -311,10 +310,10 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(Common::EthernetHeader* h
         Common::ComputeTCPNetworkChecksum(ref->from, ref->to, tcppart, 28, IPPROTO_TCP);
 
     ref->seq_num++;
-    target = sf::IpAddress(htonl(Common::BitCast<u32>(ipdata->destination_addr)));
-    ref->tcp_socket.connect(target, ntohs(tcpdata->destination_port));
+    target = sf::IpAddress(htonl(Common::BitCast<u32>(ipdata.destination_addr)));
+    ref->tcp_socket.connect(target, ntohs(tcpdata.destination_port));
     ref->ready = false;
-    ref->ip = Common::BitCast<u32>(ipdata->destination_addr);
+    ref->ip = Common::BitCast<u32>(ipdata.destination_addr);
 
     std::memcpy(&ref->tcp_buffers[0].data, in_frame.data(), in_frame.size());
     ref->tcp_buffers[0].data_size = (u16)in_frame.size();
@@ -328,30 +327,30 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(Common::EthernetHeader* h
     if (ref == nullptr)
       return;  // not found
 
-    const int c = (tcpdata->properties & 0xf0) >> 2;  // header size
-    const int size = ntohs(ipdata->total_len) - 20 - c;
-    const u32 this_seq = ntohl(tcpdata->sequence_number);
+    const int c = (tcpdata.properties & 0xf0) >> 2;  // header size
+    const int size = ntohs(ipdata.total_len) - 20 - c;
+    const u32 this_seq = ntohl(tcpdata.sequence_number);
 
     if (size > 0)
     {
       // only if data
-      if ((int)(this_seq - ref->ack_num) >= 0 && data != nullptr)
+      if ((int)(this_seq - ref->ack_num) >= 0 && data.size() >= size)
       {
-        ref->tcp_socket.send(data, size);
+        ref->tcp_socket.send(data.data(), size);
         ref->ack_num += size;
       }
 
       // send ack
       const std::vector<u8> buf = BuildAckFrame(ref);
-      WriteToQueue(buf.data(), (int)buf.size());
+      WriteToQueue(buf.data(), buf.size());
     }
     // update windows size
-    ref->window_size = ntohs(tcpdata->window_size);
+    ref->window_size = ntohs(tcpdata.window_size);
 
     // clear any ack data
-    if (tcpdata->properties & TCP_FLAG_ACK)
+    if (tcpdata.properties & TCP_FLAG_ACK)
     {
-      const u32 ack_num = ntohl(tcpdata->acknowledgement_number);
+      const u32 ack_num = ntohl(tcpdata.acknowledgement_number);
       for (auto& tcp_buf : ref->tcp_buffers)
       {
         if (!tcp_buf.used || tcp_buf.seq_id >= ack_num)
@@ -411,119 +410,154 @@ void CEXIETHERNET::BuiltInBBAInterface::InitUDPPort(u16 port)
   }
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(Common::EthernetHeader* hwdata,
-                                                       Common::IPv4Header* ipdata,
-                                                       Common::UDPHeader* udpdata, u8* data)
+void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(const Common::UDPPacket& packet, const std::vector<u8>& data)
 {
+  const auto& [hwdata, ipdata, udpdata] = packet;
   sf::IpAddress target;
+  const u32 destination_addr = ipdata.destination_addr == Common::IP_ADDR_ANY ?
+                                   m_router_ip :  // dns request
+                                   Common::BitCast<u32>(ipdata.destination_addr);
 
-  if (Common::BitCast<u32>(ipdata->destination_addr) == 0)
-    ipdata->destination_addr = Common::BitCast<std::array<u8, Common::IPV4_ADDR_LEN>>(m_router_ip);
-  // dns request
-  StackRef* ref = GetAvailableSlot(udpdata->source_port);
+  StackRef* ref = GetAvailableSlot(udpdata.source_port);
   if (ref->ip == 0)
   {
-    ref->ip = Common::BitCast<u32>(ipdata->destination_addr);  // change for ip
-    ref->local = udpdata->source_port;
-    ref->remote = udpdata->destination_port;
+    ref->ip = destination_addr;  // change for ip
+    ref->local = udpdata.source_port;
+    ref->remote = udpdata.destination_port;
     ref->type = IPPROTO_UDP;
     ref->bba_mac = *(Common::MACAddress*)&m_eth_ref->mBbaMem[BBA_NAFR_PAR0];
     ref->my_mac = m_fake_mac;
-    ref->from.sin_addr.s_addr = Common::BitCast<u32>(ipdata->destination_addr);
-    ref->from.sin_port = udpdata->destination_port;
-    ref->to.sin_addr.s_addr = Common::BitCast<u32>(ipdata->source_addr);
-    ref->to.sin_port = udpdata->source_port;
+    ref->from.sin_addr.s_addr = destination_addr;
+    ref->from.sin_port = udpdata.destination_port;
+    ref->to.sin_addr.s_addr = Common::BitCast<u32>(ipdata.source_addr);
+    ref->to.sin_port = udpdata.source_port;
     ref->udp_socket.setBlocking(false);
-    if (ref->udp_socket.bind(htons(udpdata->source_port)) != sf::Socket::Done)
+    if (ref->udp_socket.bind(htons(udpdata.source_port)) != sf::Socket::Done)
     {
       PanicAlertFmt(
           "Port {:x} is already in use, this game might not work as intented in LAN Mode.",
-          htons(udpdata->source_port));
+          htons(udpdata.source_port));
       if (ref->udp_socket.bind(sf::Socket::AnyPort) != sf::Socket::Done)
       {
         ERROR_LOG_FMT(SP1, "Couldn't open UDP socket");
         return;
       }
     }
-    if (ntohs(udpdata->destination_port) == 1900)
+    if (ntohs(udpdata.destination_port) == 1900)
     {
       InitUDPPort(26512);                                                // MK DD and 1080
       InitUDPPort(26502);                                                // Air Ride
-      if (Common::BitCast<u32>(ipdata->destination_addr) == 0xFAFFFFEF)  // force real broadcast
-        ipdata->destination_addr = Common::BitCast<std::array<u8, Common::IPV4_ADDR_LEN>>(
-            0xFFFFFFFF);  // Multi cast cannot be read
-      if (udpdata->length > 150)
+      if (udpdata.length > 150)
       {
         // Quick hack to unlock the connection, throw it back at him
         std::vector<u8> in_frame;
-        in_frame.resize(ntohs(ipdata->total_len) + 14);
+        in_frame.resize(ntohs(ipdata.total_len) + 14);
         Common::EthernetHeader* hwpart = (Common::EthernetHeader*)in_frame.data();
-        Common::IPv4Header* ippart = (Common::IPv4Header*)&in_frame.at(14);
-        std::memcpy(in_frame.data(), hwdata, in_frame.size());
-        hwpart->destination = hwdata->source;
-        hwpart->source = hwdata->destination;
-        ippart->destination_addr = ipdata->source_addr;
-        ippart->source_addr = ipdata->destination_addr;
-        WriteToQueue(in_frame.data(), (int)in_frame.size());
+        Common::IPv4Header* ippart = (Common::IPv4Header*)&in_frame[14];
+        std::memcpy(in_frame.data(), &hwdata, in_frame.size());
+        hwpart->destination = hwdata.source;
+        hwpart->source = hwdata.destination;
+        ippart->destination_addr = ipdata.source_addr;
+        if (ipdata.destination_addr == Common::IP_ADDR_SSDP)
+          ippart->source_addr = Common::IP_ADDR_BROADCAST;
+        else
+          ippart->source_addr = Common::BitCast<Common::IPAddress>(destination_addr);
+        WriteToQueue(in_frame.data(), in_frame.size());
       }
     }
   }
-  if (ntohs(udpdata->destination_port) == 53)
+  if (ntohs(udpdata.destination_port) == 53)
   {
     target = sf::IpAddress(m_dns_ip.c_str());  // dns server ip
   }
   else
   {
-    target = sf::IpAddress(ntohl(Common::BitCast<u32>(ipdata->destination_addr)));
+    target = sf::IpAddress(ntohl(Common::BitCast<u32>(ipdata.destination_addr)));
   }
-  ref->udp_socket.send(data, ntohs(udpdata->length) - 8, target, ntohs(udpdata->destination_port));
+  ref->udp_socket.send(data.data(), data.size(), target, ntohs(udpdata.destination_port));
 }
 
 bool CEXIETHERNET::BuiltInBBAInterface::SendFrame(const u8* frame, u32 size)
 {
-  int offset = 0;
-
-  std::vector<u8> out_frame(frame, frame + size);
   std::lock_guard<std::mutex> lock(m_mtx);
+  const Common::PacketView view(frame, size);
 
-  // handle the packet data
-  Common::EthernetHeader* hwdata = (Common::EthernetHeader*)out_frame.data();
-  if (hwdata->ethertype == 0x08)  // IPV4
+  const std::optional<u16> ethertype = view.GetEtherType();
+  if (!ethertype.has_value())
   {
-    // IP sub
-    Common::IPv4Header* ipdata = (Common::IPv4Header*)&out_frame.at(14);
-    offset = Common::EthernetHeader::SIZE + (ipdata->version_ihl & 0xf) * 4;
-    switch (ipdata->protocol)
+    ERROR_LOG_FMT(SP1, "Unable to send frame with invalid ethernet header");
+    return false;
+  }
+
+  switch (*ethertype)
+  {
+  case Common::IPV4_ETHERTYPE:
+  {
+    const std::optional<u8> ip_proto = view.GetIPProto();
+    if (!ip_proto.has_value())
+    {
+      ERROR_LOG_FMT(SP1, "Unable to send frame with invalid IP header");
+      return false;
+    }
+
+    switch (*ip_proto)
     {
     case IPPROTO_UDP:
     {
-      Common::UDPHeader* udpdata = (Common::UDPHeader*)&out_frame.at(offset);
-      offset += Common::UDPHeader::SIZE;
-      if (ntohs(udpdata->destination_port) == 67)
+      const auto udp_packet = view.GetUDPPacket();
+      if (!udp_packet.has_value())
       {
-        Common::DHCPBody* request = (Common::DHCPBody*)&out_frame.at(offset);
-        HandleDHCP(hwdata, udpdata, request);
+        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid UDP header");
+        return false;
+      }
+
+      const std::vector<u8> udp_data = view.GetUDPData();
+      if (ntohs(udp_packet->udp_header.destination_port) == 67)
+      {
+        Common::DHCPBody request;
+        std::memcpy(&request, udp_data.data(), udp_data.size());
+        HandleDHCP(*udp_packet, request);
       }
       else
       {
-        HandleUDPFrame(hwdata, ipdata, udpdata, &out_frame.at(offset));
+        HandleUDPFrame(*udp_packet, udp_data);
       }
       break;
     }
+
     case IPPROTO_TCP:
     {
-      Common::TCPHeader* tcpdata = (Common::TCPHeader*)&out_frame.at(offset);
-      offset += (tcpdata->properties & 0xf0) >> 2;
-      HandleTCPFrame(hwdata, ipdata, tcpdata,
-                     out_frame.size() > offset ? &out_frame.at(offset) : nullptr);
+      const auto tcp_packet = view.GetTCPPacket();
+      if (!tcp_packet.has_value())
+      {
+        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid TCP header");
+        return false;
+      }
+
+      const std::vector<u8> tcp_data = view.GetTCPData();
+      HandleTCPFrame(*tcp_packet, tcp_data);
       break;
     }
     }
+    break;
   }
-  if (hwdata->ethertype == 0x608)  // arp
+
+  case Common::ARP_ETHERTYPE:
   {
-    Common::ARPHeader* arpdata = (Common::ARPHeader*)&out_frame.at(14);
-    HandleARP(hwdata, arpdata);
+    const auto arp_packet = view.GetARPPacket();
+    if (!arp_packet.has_value())
+    {
+      ERROR_LOG_FMT(SP1, "Unable to send frame with invalid ARP header");
+      return false;
+    }
+
+    HandleARP(*arp_packet);
+    break;
+  }
+
+  default:
+    ERROR_LOG_FMT(SP1, "Unsupported EtherType {#06x}", *ethertype);
+    return false;
   }
 
   m_eth_ref->SendComplete();

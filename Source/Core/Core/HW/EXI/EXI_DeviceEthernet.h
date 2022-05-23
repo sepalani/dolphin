@@ -455,17 +455,15 @@ private:
     Common::MACAddress m_fake_mac{};
     static void ReadThreadHandler(BuiltInBBAInterface* self);
 #endif
-    void WriteToQueue(const u8* data, int length);
-    void HandleARP(Common::EthernetHeader* hwdata, Common::ARPHeader* arpdata);
-    void HandleDHCP(Common::EthernetHeader* hwdata, Common::UDPHeader* udpdata,
-                    Common::DHCPBody* request);
+    void WriteToQueue(const u8* data, std::size_t length);
     StackRef* GetAvailableSlot(u16 port);
     StackRef* GetTCPSlot(u16 src_port, u16 dst_port, u32 ip);
-    void HandleTCPFrame(Common::EthernetHeader* hwdata, Common::IPv4Header* ipdata,
-                        Common::TCPHeader* tcpdata, u8* data);
+
+    void HandleARP(const Common::ARPPacket& packet);
+    void HandleDHCP(const Common::UDPPacket& packet, const Common::DHCPBody& request);
+    void HandleTCPFrame(const Common::TCPPacket& packet, const std::vector<u8>& data);
     void InitUDPPort(u16 port);
-    void HandleUDPFrame(Common::EthernetHeader* hwdata, Common::IPv4Header* ipdata,
-                        Common::UDPHeader* udpdata, u8* data);
+    void HandleUDPFrame(const Common::UDPPacket& packet, const std::vector<u8>& data);
   };
 
   std::unique_ptr<NetworkInterface> m_network_interface;

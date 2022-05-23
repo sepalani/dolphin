@@ -36,6 +36,12 @@ enum DHCPConst
 
 using MACAddress = std::array<u8, MAC_ADDRESS_SIZE>;
 constexpr std::size_t IPV4_ADDR_LEN = 4;
+using IPAddress = std::array<u8, IPV4_ADDR_LEN>;
+constexpr IPAddress IP_ADDR_ANY = {0, 0, 0, 0};
+constexpr IPAddress IP_ADDR_BROADCAST = {255, 255, 255, 255};
+constexpr IPAddress IP_ADDR_SSDP = {239, 255, 255, 250};
+constexpr u16 IPV4_ETHERTYPE = 0x800;
+constexpr u16 ARP_ETHERTYPE = 0x806;
 
 struct EthernetHeader
 {
@@ -156,6 +162,67 @@ struct DHCPBody
   u8 options[300]{};
 };
 static_assert(sizeof(DHCPBody) == DHCPBody::SIZE);
+
+// The compiler might add 2 bytes after EthernetHeader to enforce 16-bytes alignment
+#pragma pack(push, 1)
+struct ARPPacket
+{
+  ARPPacket();
+  u16 Size() const;
+
+  EthernetHeader eth_header;
+  ARPHeader arp_header;
+
+  static constexpr std::size_t SIZE = EthernetHeader::SIZE + ARPHeader::SIZE;
+};
+static_assert(sizeof(ARPPacket) == ARPPacket::SIZE);
+
+
+struct TCPPacket
+{
+  TCPPacket();
+  u16 Size() const;
+
+  EthernetHeader eth_header;
+  IPv4Header ip_header;
+  TCPHeader tcp_header;
+
+  // TODO: Support IPv4 IHL and TCP options
+  static constexpr std::size_t SIZE = EthernetHeader::SIZE + IPv4Header::SIZE + TCPHeader::SIZE;
+};
+static_assert(sizeof(TCPPacket) == TCPPacket::SIZE);
+
+struct UDPPacket
+{
+  UDPPacket();
+  u16 Size() const;
+
+  EthernetHeader eth_header;
+  IPv4Header ip_header;
+  UDPHeader udp_header;
+
+  static constexpr std::size_t SIZE = EthernetHeader::SIZE + IPv4Header::SIZE + UDPHeader::SIZE;
+};
+static_assert(sizeof(UDPPacket) == UDPPacket::SIZE);
+#pragma pack(pop)
+
+class PacketView
+{
+public:
+  PacketView(const u8* ptr, std::size_t size);
+
+  std::optional<u16> GetEtherType() const;
+  std::optional<ARPPacket> GetARPPacket() const;
+  std::optional<u8> GetIPProto() const;
+  std::optional<TCPPacket> GetTCPPacket() const;
+  std::vector<u8> GetTCPData() const;
+  std::optional<UDPPacket> GetUDPPacket() const;
+  std::vector<u8> GetUDPData() const;
+
+private:
+  const u8* m_ptr;
+  std::size_t m_size;
+};
 
 MACAddress GenerateMacAddress(MACConsumer type);
 std::string MacAddressToString(const MACAddress& mac);

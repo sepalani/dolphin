@@ -19,6 +19,7 @@
 
 #include "Common/Random.h"
 #include "Common/StringUtil.h"
+#include "Common/BitUtils.h"
 
 namespace Common
 {
@@ -265,5 +266,96 @@ u16 ComputeTCPNetworkChecksum(const sockaddr_in& from, const sockaddr_in& to, co
                             length;
   const u32 tcp_checksum = ComputeNetworkChecksum(data, length, initial_value);
   return htons(static_cast<u16>(tcp_checksum));
+}
+
+ARPPacket::ARPPacket() = default;
+
+u16 ARPPacket::Size() const
+{
+  return static_cast<u16>(SIZE);
+}
+
+TCPPacket::TCPPacket() = default;
+
+u16 TCPPacket::Size() const
+{
+  return static_cast<u16>(SIZE);
+}
+
+UDPPacket::UDPPacket() = default;
+
+u16 UDPPacket::Size() const
+{
+  return static_cast<u16>(SIZE);
+}
+
+PacketView::PacketView(const u8* ptr, std::size_t size) : m_ptr(ptr), m_size(size)
+{
+}
+
+std::optional<u16> PacketView::GetEtherType() const
+{
+  if (m_size < EthernetHeader::SIZE)
+    return std::nullopt;
+  const std::size_t offset = offsetof(EthernetHeader, ethertype);
+  return ntohs(Common::BitCastPtr<u16>(m_ptr + offset));
+}
+
+std::optional<ARPPacket> PacketView::GetARPPacket() const
+{
+  if (m_size < ARPPacket::SIZE)
+    return std::nullopt;
+  return Common::BitCastPtr<ARPPacket>(m_ptr);
+}
+
+std::optional<u8> PacketView::GetIPProto() const
+{
+  if (m_size < EthernetHeader::SIZE + IPv4Header::SIZE)
+    return std::nullopt;
+  return m_ptr[EthernetHeader::SIZE + offsetof(IPv4Header, protocol)];
+}
+
+std::optional<TCPPacket> PacketView::GetTCPPacket() const
+{
+  if (m_size < TCPPacket::SIZE)
+    return std::nullopt;
+  return Common::BitCastPtr<TCPPacket>(m_ptr);
+}
+
+std::vector<u8> PacketView::GetTCPData() const
+{
+  const std::size_t begin = TCPPacket::SIZE;  // TODO: Use TCP data offset
+  if (m_size <= begin)
+    return {};
+
+  const std::size_t len_offset = offsetof(TCPPacket, ip_header.total_len);
+  const u16 total_len = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
+  const std::size_t end = EthernetHeader::SIZE + total_len;
+  if (end <= begin || m_size < end)
+    return {};
+
+  return std::vector<u8>(m_ptr + begin, m_ptr + end);
+}
+
+std::optional<UDPPacket> PacketView::GetUDPPacket() const
+{
+  if (m_size < UDPPacket::SIZE)
+    return std::nullopt;
+  return Common::BitCastPtr<UDPPacket>(m_ptr);
+}
+
+std::vector<u8> PacketView::GetUDPData() const
+{
+  const std::size_t begin = UDPPacket::SIZE;
+  if (m_size <= begin)
+    return {};
+
+  const std::size_t len_offset = offsetof(UDPPacket, udp_header.length);
+  const u16 length = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
+  const u16 end = begin + length;
+  if (m_size < end)
+    return {};
+
+  return std::vector<u8>(m_ptr + begin, m_ptr + end);
 }
 }  // namespace Common
