@@ -18,7 +18,6 @@
 #include "Core/HW/EXI/EXI.h"
 #include "Core/HW/Memmap.h"
 
-
 namespace ExpansionInterface
 {
 // XXX: The BBA stores multi-byte elements as little endian.
