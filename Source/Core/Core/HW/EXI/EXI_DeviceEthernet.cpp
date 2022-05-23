@@ -18,7 +18,6 @@
 #include "Core/HW/EXI/EXI.h"
 #include "Core/HW/Memmap.h"
 
-//#define BBA_TRACK_PAGE_PTRS
 
 namespace ExpansionInterface
 {

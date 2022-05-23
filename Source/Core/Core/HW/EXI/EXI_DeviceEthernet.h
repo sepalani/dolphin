@@ -425,8 +425,6 @@ private:
         : NetworkInterface(eth_ref), m_dns_ip(std::move(dns_ip)), m_local_ip(std::move(local_ip))
     {
     }
-
-  public:
     bool Activate() override;
     void Deactivate() override;
     bool IsActivated() override;
@@ -438,12 +436,12 @@ private:
   private:
     std::string m_mac_id;
     std::string m_dns_ip;
-    bool active = false;
-    u16 ip_frame_id = 0;
-    u8 queue_read = 0;
-    u8 queue_write = 0;
-    std::array<std::vector<u8>, 16> queue_data;
-    std::mutex mtx;
+    bool m_active = false;
+    u16 m_ip_frame_id = 0;
+    u8 m_queue_read = 0;
+    u8 m_queue_write = 0;
+    std::array<std::vector<u8>, 16> m_queue_data;
+    std::mutex m_mtx;
     std::string m_local_ip;
     u32 m_current_ip = 0;
     u32 m_router_ip = 0;
@@ -456,14 +454,14 @@ private:
     std::thread m_read_thread;
     Common::Flag m_read_enabled;
     Common::Flag m_read_thread_shutdown;
+    Common::MACAddress m_fake_mac{};
     static void ReadThreadHandler(BuiltInBBAInterface* self);
-    Common::MACAddress fake_mac{};
 #endif
     void WriteToQueue(const u8* data, int length);
     void HandleARP(Common::EthernetHeader* hwdata, Common::ARPHeader* arpdata);
     void HandleDHCP(Common::EthernetHeader* hwdata, Common::UDPHeader* udpdata,
                     Common::DHCPBody* request);
-    StackRef* GetAvaibleSlot(u16 port);
+    StackRef* GetAvailableSlot(u16 port);
     StackRef* GetTCPSlot(u16 src_port, u16 dst_port, u32 ip);
     void HandleTCPFrame(Common::EthernetHeader* hwdata, Common::IPv4Header* ipdata,
                         Common::TCPHeader* tcpdata, u8* data);
