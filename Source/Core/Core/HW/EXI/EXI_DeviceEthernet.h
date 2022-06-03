@@ -461,9 +461,9 @@ private:
 
     void HandleARP(const Common::ARPPacket& packet);
     void HandleDHCP(const Common::UDPPacket& packet, const Common::DHCPBody& request);
-    void HandleTCPFrame(const Common::TCPPacket& packet, const std::vector<u8>& data);
+    void HandleTCPFrame(const Common::TCPPacket& packet);
     void InitUDPPort(u16 port);
-    void HandleUDPFrame(const Common::UDPPacket& packet, const std::vector<u8>& data);
+    void HandleUDPFrame(const Common::UDPPacket& packet);
   };
 
   std::unique_ptr<NetworkInterface> m_network_interface;

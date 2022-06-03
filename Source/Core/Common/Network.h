@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "Common/CommonTypes.h"
@@ -56,14 +57,16 @@ struct EthernetHeader
   u16 ethertype = 0;
 };
 static_assert(sizeof(EthernetHeader) == EthernetHeader::SIZE);
+static_assert(std::is_trivially_copyable_v<EthernetHeader>);
 
 struct IPv4Header
 {
   IPv4Header();
   IPv4Header(u16 data_size, u8 ip_proto, const sockaddr_in& from, const sockaddr_in& to);
   u16 Size() const;
+  u16 TotalLen() const;
 
-  static constexpr std::size_t SIZE = 20;
+  static constexpr std::size_t MIN_SIZE = 20;
 
   u8 version_ihl = 0;
   u8 dscp_esn = 0;
@@ -76,7 +79,8 @@ struct IPv4Header
   std::array<u8, IPV4_ADDR_LEN> source_addr{};
   std::array<u8, IPV4_ADDR_LEN> destination_addr{};
 };
-static_assert(sizeof(IPv4Header) == IPv4Header::SIZE);
+static_assert(sizeof(IPv4Header) == IPv4Header::MIN_SIZE);
+static_assert(std::is_trivially_copyable_v<IPv4Header>);
 
 struct TCPHeader
 {
@@ -86,7 +90,7 @@ struct TCPHeader
   u16 Size() const;
   u8 IPProto() const;
 
-  static constexpr std::size_t SIZE = 20;
+  static constexpr std::size_t MIN_SIZE = 20;
 
   u16 source_port = 0;
   u16 destination_port = 0;
@@ -97,7 +101,8 @@ struct TCPHeader
   u16 checksum = 0;
   u16 urgent_pointer = 0;
 };
-static_assert(sizeof(TCPHeader) == TCPHeader::SIZE);
+static_assert(sizeof(TCPHeader) == TCPHeader::MIN_SIZE);
+static_assert(std::is_trivially_copyable_v<TCPHeader>);
 
 struct UDPHeader
 {
@@ -114,6 +119,7 @@ struct UDPHeader
   u16 checksum = 0;
 };
 static_assert(sizeof(UDPHeader) == UDPHeader::SIZE);
+static_assert(std::is_trivially_copyable_v<UDPHeader>);
 
 #pragma pack(push, 1)
 struct ARPHeader
@@ -135,6 +141,7 @@ struct ARPHeader
   u32 target_ip = 0;
 };
 static_assert(sizeof(ARPHeader) == ARPHeader::SIZE);
+static_assert(std::is_trivially_copyable_v<ARPHeader>);
 #pragma pack(pop)
 
 struct DHCPBody
@@ -166,6 +173,7 @@ struct DHCPBody
   u8 options[MAX_OPTIONS - sizeof(magic_cookie)]{};  // Variable-length options field
 };
 static_assert(sizeof(DHCPBody) == DHCPBody::SIZE);
+static_assert(std::is_trivially_copyable_v<DHCPBody>);
 
 // The compiler might add 2 bytes after EthernetHeader to enforce 16-bytes alignment
 #pragma pack(push, 1)
@@ -180,38 +188,43 @@ struct ARPPacket
   static constexpr std::size_t SIZE = EthernetHeader::SIZE + ARPHeader::SIZE;
 };
 static_assert(sizeof(ARPPacket) == ARPPacket::SIZE);
+static_assert(std::is_trivially_copyable_v<ARPPacket>);
+#pragma pack(pop)
+
+// TODO: Use C++20 std::span
+using IPv4Options = std::vector<u8>;
+using TCPOptions = std::vector<u8>;
+using TCPData = std::vector<u8>;
+using UDPData = std::vector<u8>;
 
 struct TCPPacket
 {
   TCPPacket();
-  u16 Size() const;
 
   EthernetHeader eth_header;
   IPv4Header ip_header;
+  IPv4Options ip_options;
   TCPHeader tcp_header;
+  TCPOptions tcp_options;
+  TCPData data;
 
-  // TODO: Support IPv4 IHL and TCP options
-  static constexpr std::size_t SIZE = EthernetHeader::SIZE + IPv4Header::SIZE + TCPHeader::SIZE;
+  static constexpr std::size_t MIN_SIZE =
+      sizeof(eth_header) + sizeof(ip_header) + sizeof(tcp_header);
 };
-static_assert(sizeof(TCPPacket) == TCPPacket::SIZE);
 
 struct UDPPacket
 {
   UDPPacket();
-  u16 Size() const;
 
   EthernetHeader eth_header;
   IPv4Header ip_header;
+  IPv4Options ip_options;
   UDPHeader udp_header;
+  UDPData data;
 
-  static constexpr std::size_t SIZE = EthernetHeader::SIZE + IPv4Header::SIZE + UDPHeader::SIZE;
+  static constexpr std::size_t MIN_SIZE =
+      sizeof(eth_header) + sizeof(ip_header) + sizeof(udp_header);
 };
-static_assert(sizeof(UDPPacket) == UDPPacket::SIZE);
-#pragma pack(pop)
-
-// TODO: Use C++20 std::span
-using TCPData = std::vector<u8>;
-using UDPData = std::vector<u8>;
 
 class PacketView
 {
@@ -222,12 +235,12 @@ public:
   std::optional<ARPPacket> GetARPPacket() const;
   std::optional<u8> GetIPProto() const;
   std::optional<TCPPacket> GetTCPPacket() const;
-  std::optional<TCPData> GetTCPData() const;
   std::optional<UDPPacket> GetUDPPacket() const;
-  std::optional<UDPData> GetUDPData() const;
-  std::optional<DHCPBody> GetDHCPBody() const;
 
 private:
+  std::vector<u8> ParseIPOptions(const IPv4Header& ip) const;
+  std::vector<u8> ParseTCPOptions(const IPv4Header& ip, const TCPHeader& tcp) const;
+
   const u8* m_ptr;
   std::size_t m_size;
 };

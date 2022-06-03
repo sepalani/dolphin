@@ -135,7 +135,7 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleARP(const Common::ARPPacket& packe
 void CEXIETHERNET::BuiltInBBAInterface::HandleDHCP(const Common::UDPPacket& packet,
                                                    const Common::DHCPBody& request)
 {
-  const auto& [hwdata, ip, udpdata] = packet;
+  const auto& [hwdata, ip, ipopt, udpdata, data] = packet;
   std::vector<u8> in_frame;
   in_frame.reserve(Common::DHCPBody::SIZE + 0x2a);
   in_frame.resize(0x156);
@@ -250,9 +250,9 @@ std::vector<u8> BuildAckFrame(StackRef* ref)
   return buf;
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(const Common::TCPPacket& packet, const std::vector<u8>& data)
+void CEXIETHERNET::BuiltInBBAInterface::HandleTCPFrame(const Common::TCPPacket& packet)
 {
-  const auto& [hwdata, ipdata, tcpdata] = packet;
+  const auto& [hwdata, ipdata, ipopt, tcpdata, tcpopt, data] = packet;
   sf::IpAddress target;
   StackRef* ref = GetTCPSlot(tcpdata.source_port, tcpdata.destination_port,
                              Common::BitCast<u32>(ipdata.destination_addr));
@@ -410,9 +410,9 @@ void CEXIETHERNET::BuiltInBBAInterface::InitUDPPort(u16 port)
   }
 }
 
-void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(const Common::UDPPacket& packet, const std::vector<u8>& data)
+void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(const Common::UDPPacket& packet)
 {
-  const auto& [hwdata, ipdata, udpdata] = packet;
+  const auto& [hwdata, ipdata, ipopt, udpdata, data] = packet;
   sf::IpAddress target;
   u32 destination_addr = ipdata.destination_addr == Common::IP_ADDR_ANY ?
                              m_router_ip :  // dns request
@@ -509,30 +509,26 @@ bool CEXIETHERNET::BuiltInBBAInterface::SendFrame(const u8* frame, u32 size)
       const auto udp_packet = view.GetUDPPacket();
       if (!udp_packet.has_value())
       {
-        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid UDP header");
+        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid UDP packet");
         return false;
       }
 
       if (ntohs(udp_packet->udp_header.destination_port) == 67)
       {
-        const auto dhcp_body = view.GetDHCPBody();
-        if (!dhcp_body.has_value())
+        const std::size_t len = udp_packet->data.size();
+        if (len < Common::DHCPBody::MIN_SIZE)
         {
           ERROR_LOG_FMT(SP1, "Unable to send frame with invalid DHCP body");
           return false;
         }
-        HandleDHCP(*udp_packet, *dhcp_body);
+        Common::DHCPBody dhcp_body;
+        const std::size_t dhcp_len = len > Common::DHCPBody::SIZE ? Common::DHCPBody::SIZE : len;
+        std::memcpy(&dhcp_body, udp_packet->data.data(), dhcp_len);
+        HandleDHCP(*udp_packet, dhcp_body);
       }
       else
       {
-        const auto udp_data = view.GetUDPData();
-        if (!udp_data.has_value())
-        {
-          ERROR_LOG_FMT(SP1, "Unable to send frame with invalid UDP data");
-          return false;
-        }
-
-        HandleUDPFrame(*udp_packet, *udp_data);
+        HandleUDPFrame(*udp_packet);
       }
       break;
     }
@@ -542,17 +538,11 @@ bool CEXIETHERNET::BuiltInBBAInterface::SendFrame(const u8* frame, u32 size)
       const auto tcp_packet = view.GetTCPPacket();
       if (!tcp_packet.has_value())
       {
-        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid TCP header");
+        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid TCP packet");
         return false;
       }
 
-      const auto tcp_data = view.GetTCPData();
-      if (!tcp_data.has_value())
-      {
-        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid TCP data");
-        return false;
-      }
-      HandleTCPFrame(*tcp_packet, *tcp_data);
+      HandleTCPFrame(*tcp_packet);
       break;
     }
     }

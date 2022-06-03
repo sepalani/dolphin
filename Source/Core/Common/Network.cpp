@@ -112,7 +112,12 @@ IPv4Header::IPv4Header(u16 data_size, u8 ip_proto, const sockaddr_in& from, cons
 
 u16 IPv4Header::Size() const
 {
-  return static_cast<u16>(SIZE);
+  return 4 * (version_ihl & 0xf);
+}
+
+u16 IPv4Header::TotalLen() const
+{
+  return ntohs(total_len);
 }
 
 TCPHeader::TCPHeader() = default;
@@ -157,7 +162,7 @@ TCPHeader::TCPHeader(const sockaddr_in& from, const sockaddr_in& to, u32 seq, u3
 
 u16 TCPHeader::Size() const
 {
-  return static_cast<u16>(SIZE);
+  return 4 * (ntohs(properties) >> 12);
 }
 
 u8 TCPHeader::IPProto() const
@@ -277,17 +282,7 @@ u16 ARPPacket::Size() const
 
 TCPPacket::TCPPacket() = default;
 
-u16 TCPPacket::Size() const
-{
-  return static_cast<u16>(SIZE);
-}
-
 UDPPacket::UDPPacket() = default;
-
-u16 UDPPacket::Size() const
-{
-  return static_cast<u16>(SIZE);
-}
 
 PacketView::PacketView(const u8* ptr, std::size_t size) : m_ptr(ptr), m_size(size)
 {
@@ -310,76 +305,80 @@ std::optional<ARPPacket> PacketView::GetARPPacket() const
 
 std::optional<u8> PacketView::GetIPProto() const
 {
-  if (m_size < EthernetHeader::SIZE + IPv4Header::SIZE)
+  if (m_size < EthernetHeader::SIZE + IPv4Header::MIN_SIZE)
     return std::nullopt;
   return m_ptr[EthernetHeader::SIZE + offsetof(IPv4Header, protocol)];
 }
 
 std::optional<TCPPacket> PacketView::GetTCPPacket() const
 {
-  if (m_size < TCPPacket::SIZE)
-    return std::nullopt;
-  return Common::BitCastPtr<TCPPacket>(m_ptr);
-}
-
-std::optional<TCPData> PacketView::GetTCPData() const
-{
-  const std::size_t begin = TCPPacket::SIZE;  // TODO: Use TCP data offset
-  if (m_size < begin)
-    return std::nullopt;
-  else if (m_size == begin)
-    return TCPData();
-
-  const std::size_t len_offset = offsetof(TCPPacket, ip_header.total_len);
-  const u16 total_len = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
-  const std::size_t end = EthernetHeader::SIZE + total_len;
-  if (end < begin || m_size < end)
+  if (m_size < TCPPacket::MIN_SIZE)
     return std::nullopt;
 
-  return TCPData(m_ptr + begin, m_ptr + end);
+  TCPPacket packet;
+  auto& [eth_header, ip_header, ip_options, tcp_header, tcp_options, data] = packet;
+  eth_header = Common::BitCastPtr<EthernetHeader>(m_ptr);
+  ip_header = Common::BitCastPtr<IPv4Header>(m_ptr + eth_header.Size());
+  ip_options = ParseIPOptions(ip_header);
+
+  const std::size_t tcp_offset = eth_header.Size() + ip_header.Size();
+  if (m_size < tcp_offset + sizeof(TCPHeader))
+    return std::nullopt;
+
+  tcp_header = Common::BitCastPtr<TCPHeader>(m_ptr + tcp_offset);
+  tcp_options = ParseTCPOptions(ip_header, tcp_header);
+
+  const std::size_t data_begin = tcp_offset + tcp_header.Size();
+  const std::size_t data_end = eth_header.Size() + ip_header.TotalLen();
+  if (m_size < data_end || data_begin > data_end)
+    return std::nullopt;
+  data = {m_ptr + data_begin, m_ptr + data_end};
+
+  return packet;
 }
 
 std::optional<UDPPacket> PacketView::GetUDPPacket() const
 {
-  if (m_size < UDPPacket::SIZE)
+  if (m_size < UDPPacket::MIN_SIZE)
     return std::nullopt;
-  return Common::BitCastPtr<UDPPacket>(m_ptr);
+
+  UDPPacket packet;
+  auto& [eth_header, ip_header, ip_options, udp_header, data] = packet;
+  eth_header = Common::BitCastPtr<EthernetHeader>(m_ptr);
+  ip_header = Common::BitCastPtr<IPv4Header>(m_ptr + eth_header.Size());
+  ip_options = ParseIPOptions(ip_header);
+
+  const std::size_t udp_offset = eth_header.Size() + ip_header.Size();
+  if (m_size < udp_offset + sizeof(UDPHeader))
+    return std::nullopt;
+
+  udp_header = Common::BitCastPtr<UDPHeader>(m_ptr + udp_offset);
+  const u32 length = ntohs(udp_header.length);
+
+  const std::size_t data_begin = udp_offset + udp_header.Size();
+  const std::size_t data_end = udp_offset + length;
+  if (m_size < data_end || data_begin > data_end)
+    return std::nullopt;
+  data = {m_ptr + data_begin, m_ptr + data_end};
+
+  return packet;
 }
 
-std::optional<UDPData> PacketView::GetUDPData() const
+std::vector<u8> PacketView::ParseIPOptions(const IPv4Header& ip) const
 {
-  const std::size_t begin = UDPPacket::SIZE;
-  if (m_size < begin)
-    return std::nullopt;
-  else if (m_size == begin)
-    return UDPData();
-
-  const std::size_t len_offset = offsetof(UDPPacket, udp_header.length);
-  const u16 length = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
-  const u16 end = begin + length;
+  const u32 begin = EthernetHeader::SIZE + ip.MIN_SIZE;
+  const u32 end = EthernetHeader::SIZE + ip.Size();
   if (m_size < end)
-    return std::nullopt;
-
-  return UDPData(m_ptr + begin, m_ptr + end);
+    return {};
+  return {m_ptr + begin, m_ptr + end};
 }
 
-std::optional<DHCPBody> PacketView::GetDHCPBody() const
+std::vector<u8> PacketView::ParseTCPOptions(const IPv4Header& ip, const TCPHeader& tcp) const
 {
-  const std::size_t begin = UDPPacket::SIZE;
-  if (m_size < begin + DHCPBody::MIN_SIZE)
-    return std::nullopt;
-
-  const std::size_t len_offset = offsetof(UDPPacket, udp_header.length);
-  const u16 length = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
-  if (length < DHCPBody::MIN_SIZE)
-    return std::nullopt;
-
-  const u16 dhcp_size = length > DHCPBody::SIZE ? DHCPBody::SIZE : length;
-  if (m_size < begin + dhcp_size)
-    return std::nullopt;
-
-  DHCPBody dhcp_body{};
-  std::memcpy(&dhcp_body, m_ptr + begin, dhcp_size);
-  return dhcp_body;
+  const u32 begin = EthernetHeader::SIZE + ip.Size() + tcp.MIN_SIZE;
+  const u32 end = EthernetHeader::SIZE + ip.Size() + tcp.Size();
+  if (m_size < end)
+    return {};
+  return {m_ptr + begin, m_ptr + end};
 }
 }  // namespace Common
