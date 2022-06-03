@@ -322,19 +322,21 @@ std::optional<TCPPacket> PacketView::GetTCPPacket() const
   return Common::BitCastPtr<TCPPacket>(m_ptr);
 }
 
-std::vector<u8> PacketView::GetTCPData() const
+std::optional<TCPData> PacketView::GetTCPData() const
 {
   const std::size_t begin = TCPPacket::SIZE;  // TODO: Use TCP data offset
-  if (m_size <= begin)
-    return {};
+  if (m_size < begin)
+    return std::nullopt;
+  else if (m_size == begin)
+    return TCPData();
 
   const std::size_t len_offset = offsetof(TCPPacket, ip_header.total_len);
   const u16 total_len = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
   const std::size_t end = EthernetHeader::SIZE + total_len;
-  if (end <= begin || m_size < end)
-    return {};
+  if (end < begin || m_size < end)
+    return std::nullopt;
 
-  return std::vector<u8>(m_ptr + begin, m_ptr + end);
+  return TCPData(m_ptr + begin, m_ptr + end);
 }
 
 std::optional<UDPPacket> PacketView::GetUDPPacket() const
@@ -344,18 +346,40 @@ std::optional<UDPPacket> PacketView::GetUDPPacket() const
   return Common::BitCastPtr<UDPPacket>(m_ptr);
 }
 
-std::vector<u8> PacketView::GetUDPData() const
+std::optional<UDPData> PacketView::GetUDPData() const
 {
   const std::size_t begin = UDPPacket::SIZE;
-  if (m_size <= begin)
-    return {};
+  if (m_size < begin)
+    return std::nullopt;
+  else if (m_size == begin)
+    return UDPData();
 
   const std::size_t len_offset = offsetof(UDPPacket, udp_header.length);
   const u16 length = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
   const u16 end = begin + length;
   if (m_size < end)
-    return {};
+    return std::nullopt;
 
-  return std::vector<u8>(m_ptr + begin, m_ptr + end);
+  return UDPData(m_ptr + begin, m_ptr + end);
+}
+
+std::optional<DHCPBody> PacketView::GetDHCPBody() const
+{
+  const std::size_t begin = UDPPacket::SIZE;
+  if (m_size < begin + DHCPBody::MIN_SIZE)
+    return std::nullopt;
+
+  const std::size_t len_offset = offsetof(UDPPacket, udp_header.length);
+  const u16 length = ntohs(Common::BitCastPtr<u16>(m_ptr + len_offset));
+  if (length < DHCPBody::MIN_SIZE)
+    return std::nullopt;
+
+  const u16 dhcp_size = length > DHCPBody::SIZE ? DHCPBody::SIZE : length;
+  if (m_size < begin + dhcp_size)
+    return std::nullopt;
+
+  DHCPBody dhcp_body{};
+  std::memcpy(&dhcp_body, m_ptr + begin, dhcp_size);
+  return dhcp_body;
 }
 }  // namespace Common

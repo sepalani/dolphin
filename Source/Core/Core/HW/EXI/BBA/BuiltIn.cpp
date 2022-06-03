@@ -414,9 +414,9 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(const Common::UDPPacket& 
 {
   const auto& [hwdata, ipdata, udpdata] = packet;
   sf::IpAddress target;
-  const u32 destination_addr = ipdata.destination_addr == Common::IP_ADDR_ANY ?
-                                   m_router_ip :  // dns request
-                                   Common::BitCast<u32>(ipdata.destination_addr);
+  u32 destination_addr = ipdata.destination_addr == Common::IP_ADDR_ANY ?
+                             m_router_ip :  // dns request
+                             Common::BitCast<u32>(ipdata.destination_addr);
 
   StackRef* ref = GetAvailableSlot(udpdata.source_port);
   if (ref->ip == 0)
@@ -445,23 +445,25 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(const Common::UDPPacket& 
     }
     if (ntohs(udpdata.destination_port) == 1900)
     {
-      InitUDPPort(26512);                                                // MK DD and 1080
-      InitUDPPort(26502);                                                // Air Ride
+      InitUDPPort(26512);  // MK DD and 1080
+      InitUDPPort(26502);  // Air Ride
+
+      // Force a real broadcast
+      if (ipdata.destination_addr == Common::IP_ADDR_SSDP)
+        destination_addr = Common::BitCast<u32>(Common::IP_ADDR_BROADCAST);
+
       if (udpdata.length > 150)
       {
         // Quick hack to unlock the connection, throw it back at him
-        std::vector<u8> in_frame;
-        in_frame.resize(ntohs(ipdata.total_len) + 14);
+        const std::size_t frame_len = ntohs(ipdata.total_len) + Common::EthernetHeader::SIZE;
+        std::vector<u8> in_frame(frame_len);
         Common::EthernetHeader* hwpart = (Common::EthernetHeader*)in_frame.data();
         Common::IPv4Header* ippart = (Common::IPv4Header*)&in_frame[14];
         std::memcpy(in_frame.data(), &hwdata, in_frame.size());
         hwpart->destination = hwdata.source;
         hwpart->source = hwdata.destination;
         ippart->destination_addr = ipdata.source_addr;
-        if (ipdata.destination_addr == Common::IP_ADDR_SSDP)
-          ippart->source_addr = Common::IP_ADDR_BROADCAST;
-        else
-          ippart->source_addr = Common::BitCast<Common::IPAddress>(destination_addr);
+        ippart->source_addr = Common::BitCast<Common::IPAddress>(destination_addr);
         WriteToQueue(in_frame.data(), in_frame.size());
       }
     }
@@ -472,7 +474,7 @@ void CEXIETHERNET::BuiltInBBAInterface::HandleUDPFrame(const Common::UDPPacket& 
   }
   else
   {
-    target = sf::IpAddress(ntohl(Common::BitCast<u32>(ipdata.destination_addr)));
+    target = sf::IpAddress(ntohl(destination_addr));
   }
   ref->udp_socket.send(data.data(), data.size(), target, ntohs(udpdata.destination_port));
 }
@@ -511,16 +513,26 @@ bool CEXIETHERNET::BuiltInBBAInterface::SendFrame(const u8* frame, u32 size)
         return false;
       }
 
-      const std::vector<u8> udp_data = view.GetUDPData();
       if (ntohs(udp_packet->udp_header.destination_port) == 67)
       {
-        Common::DHCPBody request;
-        std::memcpy(&request, udp_data.data(), udp_data.size());
-        HandleDHCP(*udp_packet, request);
+        const auto dhcp_body = view.GetDHCPBody();
+        if (!dhcp_body.has_value())
+        {
+          ERROR_LOG_FMT(SP1, "Unable to send frame with invalid DHCP body");
+          return false;
+        }
+        HandleDHCP(*udp_packet, *dhcp_body);
       }
       else
       {
-        HandleUDPFrame(*udp_packet, udp_data);
+        const auto udp_data = view.GetUDPData();
+        if (!udp_data.has_value())
+        {
+          ERROR_LOG_FMT(SP1, "Unable to send frame with invalid UDP data");
+          return false;
+        }
+
+        HandleUDPFrame(*udp_packet, *udp_data);
       }
       break;
     }
@@ -534,8 +546,13 @@ bool CEXIETHERNET::BuiltInBBAInterface::SendFrame(const u8* frame, u32 size)
         return false;
       }
 
-      const std::vector<u8> tcp_data = view.GetTCPData();
-      HandleTCPFrame(*tcp_packet, tcp_data);
+      const auto tcp_data = view.GetTCPData();
+      if (!tcp_data.has_value())
+      {
+        ERROR_LOG_FMT(SP1, "Unable to send frame with invalid TCP data");
+        return false;
+      }
+      HandleTCPFrame(*tcp_packet, *tcp_data);
       break;
     }
     }

@@ -142,7 +142,11 @@ struct DHCPBody
   DHCPBody();
   DHCPBody(u32 transaction, MACAddress client_address, u32 new_ip, u32 serv_ip);
   bool AddDHCPOption(u8 size, u8 fnc, const std::vector<u8>& params);
-  static constexpr std::size_t SIZE = 540;
+
+  static constexpr std::size_t SIZE = 548;
+  static constexpr std::size_t MAX_OPTIONS = 312;  // RFC 1531
+  static constexpr std::size_t MIN_SIZE = SIZE - MAX_OPTIONS;
+
   u8 message_type = 0;
   u8 hardware_type = 0;
   u8 hardware_addr = 0;
@@ -158,8 +162,8 @@ struct DHCPBody
   unsigned char padding[10]{};
   unsigned char hostname[0x40]{};
   unsigned char boot_file[0x80]{};
-  u32 magic_cookie = 0x63538263;
-  u8 options[300]{};
+  u8 magic_cookie[4] = {99, 130, 83, 99};            // The first four octets of the "options" field
+  u8 options[MAX_OPTIONS - sizeof(magic_cookie)]{};  // Variable-length options field
 };
 static_assert(sizeof(DHCPBody) == DHCPBody::SIZE);
 
@@ -176,7 +180,6 @@ struct ARPPacket
   static constexpr std::size_t SIZE = EthernetHeader::SIZE + ARPHeader::SIZE;
 };
 static_assert(sizeof(ARPPacket) == ARPPacket::SIZE);
-
 
 struct TCPPacket
 {
@@ -206,6 +209,10 @@ struct UDPPacket
 static_assert(sizeof(UDPPacket) == UDPPacket::SIZE);
 #pragma pack(pop)
 
+// TODO: Use C++20 std::span
+using TCPData = std::vector<u8>;
+using UDPData = std::vector<u8>;
+
 class PacketView
 {
 public:
@@ -215,9 +222,10 @@ public:
   std::optional<ARPPacket> GetARPPacket() const;
   std::optional<u8> GetIPProto() const;
   std::optional<TCPPacket> GetTCPPacket() const;
-  std::vector<u8> GetTCPData() const;
+  std::optional<TCPData> GetTCPData() const;
   std::optional<UDPPacket> GetUDPPacket() const;
-  std::vector<u8> GetUDPData() const;
+  std::optional<UDPData> GetUDPData() const;
+  std::optional<DHCPBody> GetDHCPBody() const;
 
 private:
   const u8* m_ptr;
