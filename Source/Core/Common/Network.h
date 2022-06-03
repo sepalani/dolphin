@@ -152,7 +152,7 @@ struct DHCPBody
   u8 hardware_addr = 0;
   u8 hops = 0;
   u32 transaction_id = 0;
-  u16 secondes = 0;
+  u16 seconds = 0;
   u16 boot_flag = 0;
   u32 client_ip = 0;
   u32 your_ip = 0;
