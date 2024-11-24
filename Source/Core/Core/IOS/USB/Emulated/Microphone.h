@@ -47,7 +47,8 @@ private:
   void StreamStart();
   void StopStream();
 
-  static constexpr u32 SAMPLING_RATE = 8000;
+  //static constexpr u32 SAMPLING_RATE = 8000;
+  static constexpr u32 SAMPLING_RATE = 16000;
   using SampleType = s16;
   static constexpr u32 BUFF_SIZE_SAMPLES = 16;
   static constexpr u32 STREAM_SIZE = BUFF_SIZE_SAMPLES * 500;
@@ -94,15 +95,17 @@ private:
     FloatType ComputeGain(FloatType db) const;
 
     void Reset();
-    void LogStats();
+    void LogStats(u16);
 
     // Samples used to compute the loudness level
     static constexpr u16 SAMPLES_NEEDED = SAMPLING_RATE / 125;
     static_assert((SAMPLES_NEEDED % BUFF_SIZE_SAMPLES) == 0);
 
     static constexpr FloatType MAX_AMPLTIUDE = std::numeric_limits<UnsignedSampleType>::max() / 2;
-    static const FloatType DB_MIN;
-    static const FloatType DB_MAX;
+    // According to the "AKM AK5702 (ADC)" datasheet on wiibrew:
+    // > Input Digital Volume (+36dB ∼ −54dB, 0.375dB Step, Mute)
+    static constexpr FloatType DB_MIN = FloatType(-54);
+    static constexpr FloatType DB_MAX = FloatType(36);
 
     u16 samples_count = 0;
     u32 absolute_sum = 0;

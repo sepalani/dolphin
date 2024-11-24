@@ -208,18 +208,20 @@ u16 Microphone::GetLoudnessLevel() const
 void Microphone::UpdateLoudness(std::ranges::input_range auto&& samples)
 {
   // Based on MH3 graphical cues, let's use a 0x4000 window
-  static const u32 WINDOW = 0x4000;
-  static const float UNIT = (m_loudness.DB_MAX - m_loudness.DB_MIN) / WINDOW;
+  static constexpr u32 WINDOW = 0x4000;
+  static constexpr auto UNIT = (m_loudness.DB_MAX - m_loudness.DB_MIN) / WINDOW;
 
   m_loudness.Update(samples);
 
   if (m_loudness.samples_count >= m_loudness.SAMPLES_NEEDED)
   {
-    const float amp_db = m_loudness.GetAmplitudeDb();
-    m_loudness_level = static_cast<u16>((amp_db - m_loudness.DB_MIN) / UNIT);
+    const auto amp_db = m_loudness.GetAmplitudeDb();
+    m_loudness_level = static_cast<u16>((std::max(amp_db, m_loudness.DB_MIN) - m_loudness.DB_MIN) / UNIT);
 
+#define WII_SPEAK_LOG_STATS 1
 #ifdef WII_SPEAK_LOG_STATS
-    m_loudness.LogStats();
+    // m_loudness_level = Config::Get(Config::MAIN_WII_SPEAK_VOLUME_MODIFIER);
+    // m_loudness.LogStats(m_loudness_level);
 #else
     DEBUG_LOG_FMT(IOS_USB,
                   "Wii Speak loudness stats (sample count: {}/{}):\n"
@@ -247,10 +249,6 @@ Microphone::FloatType Microphone::ComputeGain(FloatType relative_db) const
 {
   return m_loudness.ComputeGain(relative_db);
 }
-
-const Microphone::FloatType Microphone::Loudness::DB_MIN =
-    20 * std::log10(FloatType(1) / MAX_AMPLTIUDE);
-const Microphone::FloatType Microphone::Loudness::DB_MAX = 20 * std::log10(FloatType(1));
 
 Microphone::Loudness::SampleType Microphone::Loudness::GetPeak() const
 {
@@ -319,7 +317,7 @@ void Microphone::Loudness::Reset()
   peak_max = 0;
 }
 
-void Microphone::Loudness::LogStats()
+void Microphone::Loudness::LogStats(u16 loudness_level)
 {
   const auto amplitude = GetAmplitude();
   const auto amplitude_db = GetDecibel(amplitude);
@@ -335,8 +333,9 @@ void Microphone::Loudness::LogStats()
                " - min={} max={} amplitude={} ({} dB)\n"
                " - rms={} ({} dB) \n"
                " - abs_mean={} ({} dB)\n"
-               " - crest_factor={} ({} dB)",
+               " - crest_factor={} ({} dB)\n"
+               " - level={:04x}",
                samples_count, SAMPLES_NEEDED, peak_min, peak_max, amplitude, amplitude_db, rms,
-               rms_db, abs_mean, abs_mean_db, crest_factor, crest_factor_db);
+               rms_db, abs_mean, abs_mean_db, crest_factor, crest_factor_db, loudness_level);
 }
 }  // namespace IOS::HLE::USB

@@ -15,6 +15,8 @@
 #include <QString>
 #include <QVBoxLayout>
 
+#include <QSpinBox>
+
 #include "AudioCommon/CubebUtils.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
@@ -67,6 +69,14 @@ void WiiSpeakWindow::CreateMainWindow()
           &WiiSpeakWindow::SetWiiSpeakConnectionState);
   checkbox_mic_muted->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
   config_layout->addWidget(checkbox_mic_muted);
+
+  // Debug
+  auto spinbox = new QSpinBox;
+  spinbox->setRange(0, 0xFFFF);
+  connect(spinbox, &QSpinBox::valueChanged, [](int value) {
+    Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_VOLUME_MODIFIER, value);
+  });
+  config_layout->addWidget(spinbox);
 
   auto* volume_layout = new QGridLayout();
   static constexpr int FILTER_MIN = -50;

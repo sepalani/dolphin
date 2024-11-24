@@ -211,9 +211,10 @@ int WiiSpeak::SubmitTransfer(std::unique_ptr<IsoMessage> cmd)
 
   // Transferring too slow causes the visual cue to not appear,
   // while transferring too fast results in more choppy audio.
+  /*
   DEBUG_LOG_FMT(IOS_USB,
                 "Wii Speak isochronous transfer: length={:04x} endpoint={:02x} num_packets={:02x}",
-                cmd->length, cmd->endpoint, cmd->num_packets);
+                cmd->length, cmd->endpoint, cmd->num_packets);*/
 
   // According to the Wii Speak specs on wiibrew, it's "USB 2.0 Full-speed Device Module",
   // so the length of a single frame should be 1 ms.
