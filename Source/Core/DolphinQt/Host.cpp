@@ -187,6 +187,13 @@ void Host::SetTASInputFocus(const bool focus)
   m_tas_input_focus = focus;
 }
 
+void* Host::GetWindowHandle() const
+{
+  if (m_render_to_main && !m_render_fullscreen)
+    return m_main_window_handle.load();
+  return m_render_handle.load();
+}
+
 void Host::ResizeSurface(int new_width, int new_height)
 {
   if (g_presenter)
@@ -241,6 +248,11 @@ bool Host_RendererIsFullscreen()
 bool Host_TASInputHasFocus()
 {
   return Host::GetInstance()->GetTASInputFocus();
+}
+
+void* Host_GetWindowHandle()
+{
+  return Host::GetInstance()->GetWindowHandle();
 }
 
 void Host_YieldToUI()

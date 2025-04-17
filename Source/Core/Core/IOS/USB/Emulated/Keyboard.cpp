@@ -10,11 +10,17 @@
 #include "Common/Projection.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/HW/Memmap.h"
+#include "Core/Host.h"
 #include "InputCommon/ControlReference/ControlReference.h"
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
+
+#include <SDL.h>
+#include <SDL_keyboard.h>
+
+#pragma optimize("", off)
 
 namespace IOS::HLE::USB
 {
@@ -299,12 +305,34 @@ static const std::vector<VkHidPair> VK_HID_MAP = CleanVkHidMap(GetVkHidMap());
 #endif
 }  // namespace
 
+static SDL_Window* YOLO = nullptr;
+
 Keyboard::Keyboard(IOS::HLE::EmulationKernel& ios) : m_ios(ios)
 {
   m_id = u64(m_vid) << 32 | u64(m_pid) << 16 | u64(9) << 8 | u64(1);
+
+#ifdef HAVE_SDL2
+  if (YOLO != nullptr)
+    return;
+  SDL_InitSubSystem(SDL_INIT_VIDEO);
+  // SDL_SetHint(SDL_HINT_VIDEO_WINDOW_SHARE_PIXEL_FORMAT);
+  YOLO = SDL_CreateWindowFrom(Host_GetWindowHandle());
+  if (YOLO == nullptr)
+  {
+    ERROR_LOG_FMT(IOS_USB, "SDL failed to acquire the window handle to capture keyboard events");
+  }
+#endif
 }
 
-Keyboard::~Keyboard() = default;
+Keyboard::~Keyboard()
+{
+#ifdef HAVE_SDL2
+  /* SDL_DestroyWindow(YOLO);
+  YOLO = nullptr;
+  SDL_QuitSubSystem(SDL_INIT_VIDEO);
+  */
+#endif
+}
 
 DeviceDescriptor Keyboard::GetDeviceDescriptor() const
 {
@@ -521,7 +549,36 @@ HIDPressedKeys Keyboard::PollHIDPressedKeys()
   HIDPressedKeys pressed_keys{};
   std::size_t pressed_keys_count = 0;
 
-#ifdef _WIN32
+#if defined(HAVE_SDL2)
+  // SDL_PumpEvents(); // <-- unsafe
+
+  bool in = false;
+
+  SDL_Event e;
+  while (SDL_PollEvent(&e))
+  {
+    switch (e.type)
+    {
+    case SDL_KEYDOWN:
+      in = true;
+      break;
+    }
+  }
+
+  const u8* keys = SDL_GetKeyboardState(NULL);
+
+  // Theses SDL scan codes map their HID usage ID
+  for (int scan_code = SDL_SCANCODE_A; scan_code < SDL_SCANCODE_LCTRL; ++scan_code)
+  {
+    if (!keys[scan_code])
+      continue;
+
+    pressed_keys[pressed_keys_count++] = scan_code;
+    if (pressed_keys_count == pressed_keys.size())
+      break;
+  }
+
+#elif defined(_WIN32)
   for (const auto& [virtual_key, hid_usage_id] : VK_HID_MAP)
   {
     if (!IsKeyPressed(virtual_key))
