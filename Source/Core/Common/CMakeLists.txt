@@ -390,6 +390,12 @@ elseif(WIN32)
   target_link_libraries(common PRIVATE "-INCLUDE:enableCompatPatches")
 endif()
 
+# Optional keyboard backend
+if(ENABLE_SDL)
+  target_link_libraries(common PRIVATE SDL3::SDL3)
+  target_compile_definitions(common PRIVATE HAVE_SDL2=1)
+endif()
+
 if(MSVC)
   # Add precompiled header
   target_link_libraries(common PRIVATE use_pch)

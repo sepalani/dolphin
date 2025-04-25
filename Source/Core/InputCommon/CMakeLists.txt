@@ -178,7 +178,7 @@ if(ENABLE_SDL)
     ControllerInterface/SDL/SDL.cpp
     ControllerInterface/SDL/SDL.h
   )
-  target_link_libraries(inputcommon PRIVATE SDL2::SDL2)
+  target_link_libraries(inputcommon PRIVATE SDL3::SDL3)
   target_compile_definitions(inputcommon PUBLIC HAVE_SDL2=1)
 endif()
 

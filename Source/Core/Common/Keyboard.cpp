@@ -5,10 +5,11 @@
 
 #include <mutex>
 #include <utility>
+#include <vector>
 
 #ifdef HAVE_SDL2
-#include <SDL_events.h>
-#include <SDL_keyboard.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keyboard.h>
 
 // Will be overridden by Dolphin's SDL InputBackend
 u32 Common::KeyboardContext::s_sdl_init_event_type(-1);
@@ -52,7 +53,7 @@ KeyboardContext::~KeyboardContext()
 #endif
 }
 
-const void* KeyboardContext::HandlerState::GetHandle() const
+void* KeyboardContext::HandlerState::GetHandle() const
 {
   if (is_rendering_to_main && !is_fullscreen)
     return main_handle;
@@ -70,10 +71,17 @@ void KeyboardContext::NotifyHandlerChanged(const KeyboardContext::HandlerState& 
 #endif
 }
 
-const void* KeyboardContext::GetWindowHandle()
+void* KeyboardContext::GetWindowHandle()
 {
   return s_handler_state.GetHandle();
 }
+
+
+const Common::KeyboardContext::HandlerState& KeyboardContext::GetHandlerState()
+{
+  return s_handler_state;
+}
+
 
 std::shared_ptr<KeyboardContext> KeyboardContext::GetInstance()
 {
@@ -96,9 +104,9 @@ HIDPressedState KeyboardContext::GetPressedState(int keyboard_layout) const
 bool KeyboardContext::IsVirtualKeyPressed(int virtual_key) const
 {
 #ifdef HAVE_SDL2
-  if (virtual_key >= SDL_NUM_SCANCODES)
+  if (virtual_key >= SDL_SCANCODE_COUNT)
     return false;
-  return m_keyboard_state[virtual_key] == 1;
+  return m_keyboard_state[virtual_key];
 #else
   // TODO: Android implementation
   return false;

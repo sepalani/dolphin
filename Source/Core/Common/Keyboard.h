@@ -33,16 +33,17 @@ public:
 
   struct HandlerState
   {
-    const void* main_handle = nullptr;
-    const void* renderer_handle = nullptr;
+    void* main_handle = nullptr;
+    void* renderer_handle = nullptr;
     bool is_fullscreen = false;
     bool is_rendering_to_main = false;
 
-    const void* GetHandle() const;
+    void* GetHandle() const;
   };
 
   static void NotifyHandlerChanged(const HandlerState& state);
-  static const void* GetWindowHandle();
+  static void* GetWindowHandle();
+  static const HandlerState& GetHandlerState();
   static std::shared_ptr<KeyboardContext> GetInstance();
 
   HIDPressedState GetPressedState(int keyboard_layout) const;
@@ -61,7 +62,7 @@ private:
   HIDPressedKeys PollHIDPressedKeys(int keyboard_layout) const;
 
 #ifdef HAVE_SDL2
-  const u8* m_keyboard_state = nullptr;
+  const bool* m_keyboard_state = nullptr;
 #endif
 };
 }  // namespace Common
