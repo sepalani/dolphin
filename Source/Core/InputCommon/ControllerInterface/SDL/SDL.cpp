@@ -72,11 +72,14 @@ SDL_Window* SDL_CreateWindowFrom(void* handle)
   return window;
 }
 
-std::optional<const char*> UpdateKeyboardHandle(UniqueSDLWindow* unique_window)
+std::optional<const char*> UpdateKeyboardHandle(UniqueSDLWindow* unique_window,
+                                                const WindowSystemInfo& wsi)
 {
   std::optional<const char*> error;
 
-  void* keyboard_handle = Common::KeyboardContext::GetWindowHandle();
+  const bool is_wayland = wsi.type == WindowSystemType::Wayland;
+  void* keyboard_handle =
+      is_wayland ? wsi.render_window : Common::KeyboardContext::GetWindowHandle();
   SDL_Window* keyboard_window = SDL_CreateWindowFrom(keyboard_handle);
   if (keyboard_window == nullptr)
     error = SDL_GetError();
@@ -376,7 +379,9 @@ bool InputBackend::HandleEventAndContinue(const SDL_Event& e)
       return true;
     }
 
-    if (const auto error = UpdateKeyboardHandle(&m_keyboard_window); error.has_value())
+    if (const auto error = UpdateKeyboardHandle(&m_keyboard_window,
+                                                GetControllerInterface().GetWindowSystemInfo());
+        error.has_value())
     {
       ERROR_LOG_FMT(IOS_USB, "SDL failed to attach window to capture keyboard input: {}", *error);
       return true;
@@ -390,7 +395,9 @@ bool InputBackend::HandleEventAndContinue(const SDL_Event& e)
     // Release previous SDLWindow
     m_keyboard_window.reset();
 
-    if (const auto error = UpdateKeyboardHandle(&m_keyboard_window); error.has_value())
+    if (const auto error = UpdateKeyboardHandle(&m_keyboard_window,
+                                                GetControllerInterface().GetWindowSystemInfo());
+        error.has_value())
     {
       ERROR_LOG_FMT(IOS_USB, "SDL failed to switch window to capture keyboard input: {}", *error);
       return true;
