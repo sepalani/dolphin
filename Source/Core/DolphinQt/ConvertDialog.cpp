@@ -26,6 +26,8 @@
 #include "DiscIO/Blob.h"
 #include "DiscIO/DiscUtils.h"
 #include "DiscIO/ScrubbedBlob.h"
+#include "DiscIO/DirectoryBlob.h"
+#include "DiscIO/RiivolutionPatcher.h"
 #include "DiscIO/WIABlob.h"
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
@@ -106,6 +108,20 @@ ConvertDialog::ConvertDialog(QList<std::shared_ptr<const UICommon::GameFile>> fi
   OnCompressionChanged();
 }
 
+bool ConvertDialog::AddRiivolutionPatches(const std::vector<DiscIO::Riivolution::Patch>& patches, QWidget* parent)
+{
+  if (!ShowAreYouSureDialog(tr("Converting Riivolution patches to a new disc image is experimental.\n"
+                               "\n"
+                               "Only a limited set of Riivolution features is supported.\n"
+                               "\n"
+                               "Do you want to continue anyway?"), parent))
+  {
+    return false;
+  }
+  m_patches = patches;
+  return true;
+}
+
 void ConvertDialog::AddToBlockSizeComboBox(int size)
 {
   m_block_size->addItem(QString::fromStdString(UICommon::FormatSize(size, 0)), size);
@@ -125,6 +141,25 @@ void ConvertDialog::AddToCompressionComboBox(const QString& name,
 void ConvertDialog::AddToCompressionLevelComboBox(int level)
 {
   m_compression_level->addItem(QString::number(level), level);
+}
+
+std::unique_ptr<DiscIO::BlobReader>
+ConvertDialog::ApplyRiivolutionPatches(std::unique_ptr<DiscIO::BlobReader> blob_reader)
+{
+  auto blob_disc = DiscIO::CreateDisc(std::move(blob_reader));
+  if (!blob_disc)
+    return nullptr;
+
+  return DiscIO::DirectoryBlobReader::Create(
+      std::move(blob_disc),
+      [&](std::vector<DiscIO::FSTBuilderNode>* fst) {
+        DiscIO::Riivolution::ApplyPatchesToFiles(
+            m_patches, DiscIO::Riivolution::PatchIndex::DolphinSysFiles, fst, nullptr);
+      },
+      [&](std::vector<DiscIO::FSTBuilderNode>* fst, DiscIO::FSTBuilderNode* dol_node) {
+        DiscIO::Riivolution::ApplyPatchesToFiles(
+            m_patches, DiscIO::Riivolution::PatchIndex::FileSystem, fst, dol_node);
+      });
 }
 
 void ConvertDialog::OnFormatChanged()
@@ -264,9 +299,9 @@ void ConvertDialog::OnCompressionChanged()
   m_compression_level->setEnabled(m_compression_level->count() > 1);
 }
 
-bool ConvertDialog::ShowAreYouSureDialog(const QString& text)
+bool ConvertDialog::ShowAreYouSureDialog(const QString& text, QWidget* parent)
 {
-  ModalMessageBox warning(this);
+  ModalMessageBox warning(parent ? parent : this);
   warning.setIcon(QMessageBox::Warning);
   warning.setWindowTitle(tr("Confirm"));
   warning.setText(tr("Are you sure?"));
@@ -452,6 +487,16 @@ void ConvertDialog::Convert()
 
     if (!scrub_current_file)
       blob_reader = DiscIO::CreateBlobReader(original_path);
+
+    if (!m_patches.empty())
+    {
+      blob_reader = ApplyRiivolutionPatches(std::move(blob_reader));
+      if (!blob_reader)
+      {
+        ModalMessageBox::critical(this, tr("Error"), tr("Failed to apply Riivolution patches."));
+        return;
+      }
+    }
 
     if (!blob_reader)
     {

@@ -46,6 +46,7 @@ private:
   void SaveConfigXMLs();
   void BootGame();
   void SaveAsPreset();
+  void Convert();
 
 #ifdef USE_RETRO_ACHIEVEMENTS
   HardcoreWarningWidget* m_hc_warning;

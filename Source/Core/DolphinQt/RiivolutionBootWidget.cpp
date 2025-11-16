@@ -27,7 +27,9 @@
 #include "DiscIO/RiivolutionParser.h"
 #include "DiscIO/RiivolutionPatcher.h"
 #include "DolphinQt/Config/HardcoreWarningWidget.h"
+#include "DolphinQt/ConvertDialog.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
+#include "UICommon/GameFile.h"
 
 struct GuiRiivolutionPatchIndex
 {
@@ -65,6 +67,7 @@ void RiivolutionBootWidget::CreateWidgets()
   auto* boot_game_button = new QPushButton(tr("Start"));
   boot_game_button->setDefault(true);
   auto* save_preset_button = new QPushButton(tr("Save as Preset..."));
+  auto* convert_button = new QPushButton(tr("Convert..."));
   auto* group_box = new QGroupBox();
   auto* scroll_area = new QScrollArea();
 
@@ -80,6 +83,7 @@ void RiivolutionBootWidget::CreateWidgets()
   button_layout->addStretch();
   button_layout->addWidget(open_xml_button, 0, Qt::AlignRight);
   button_layout->addWidget(save_preset_button, 0, Qt::AlignRight);
+  button_layout->addWidget(convert_button, 0, Qt::AlignRight);
   button_layout->addWidget(boot_game_button, 0, Qt::AlignRight);
 
   auto* layout = new QVBoxLayout();
@@ -93,6 +97,7 @@ void RiivolutionBootWidget::CreateWidgets()
   connect(open_xml_button, &QPushButton::clicked, this, &RiivolutionBootWidget::OpenXML);
   connect(boot_game_button, &QPushButton::clicked, this, &RiivolutionBootWidget::BootGame);
   connect(save_preset_button, &QPushButton::clicked, this, &RiivolutionBootWidget::SaveAsPreset);
+  connect(convert_button, &QPushButton::clicked, this, &RiivolutionBootWidget::Convert);
 }
 
 void RiivolutionBootWidget::ConnectWidgets()
@@ -350,4 +355,35 @@ void RiivolutionBootWidget::SaveAsPreset()
   if (dot != std::string::npos)
     descriptor.display_name = descriptor.display_name.substr(0, dot);
   DiscIO::WriteGameModDescriptorFile(target_path.toStdString(), descriptor, true);
+}
+
+void RiivolutionBootWidget::Convert()
+{
+  QList<std::shared_ptr<const UICommon::GameFile>> games(
+      {std::make_shared<const UICommon::GameFile>(m_base_game_path)});
+
+  ConvertDialog dialog{std::move(games), this};
+  // Not working, TODO: Check BootGame, GeneratePatches, m_file_dataloader
+   SaveConfigXMLs();
+
+  // -- From BootGame
+  m_patches.clear();
+  for (const auto& disc : m_discs)
+  {
+    auto patches = disc.disc.GeneratePatches(m_game_id);
+
+    // set the file loader for each patch
+    for (auto& patch : patches)
+    {
+      patch.m_file_data_loader = std::make_shared<DiscIO::Riivolution::FileDataLoaderHostFS>(
+          disc.root, disc.disc.m_xml_path, patch.m_root);
+    }
+
+    m_patches.insert(m_patches.end(), patches.begin(), patches.end());
+  }
+  // --
+  if (!dialog.AddRiivolutionPatches(GetPatches(), this))
+    return;
+
+  dialog.exec();
 }
