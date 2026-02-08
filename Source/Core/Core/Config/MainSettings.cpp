@@ -647,24 +647,50 @@ static std::string GetDefaultTriforceIPOverrides()
 {
   constexpr std::string_view entries[] = {
       // CyCraft Connect IP
-      "192.168.11.111=127.0.0.1",
-
-      // Key of Avalon
-      // Note: The server and client can't run on the same system,
-      //  but it's replaced with 127.0.0.1 here just for reference.
-      "192.168.13.1=127.0.0.1",
+      "192.168.11.111=127.0.0.1:80",
 
       // NAMCO Camera
-      "192.168.29.104-108=127.0.0.1",
+      "192.168.29.104-108=127.0.0.1:80",
 
       // All.Net Connect IP
-      "192.168.150.16=127.0.0.1",
+      "192.168.150.16=127.0.0.1:80",
+
+      // Mario Kart Arcade GP
+      // This config allows for 4x multicab on the same PC.
+      // The ephemeral ports are constrained to differentiate incoming connections.
+      "192.168.29.150:5000-5008=127.0.0.1:5000-5008",
+      "192.168.29.150=127.0.0.1:33000-33999",
+
+      "192.168.29.151:5000-5008=127.0.0.1:5010-5018",
+      "192.168.29.151=127.0.0.1:34000-34999",
+
+      "192.168.29.152:5000-5008=127.0.0.1:5020-5028",
+      "192.168.29.152=127.0.0.1:35000-35999",
+
+      "192.168.29.153:5000-5008=127.0.0.1:5030-5038",
+      "192.168.29.153=127.0.0.1:36000-36999",
+
+      // Key of Avalon
+      // This config isn't usable as-is. It's just here for reference.
+      "192.168.13.1=127.0.0.1",
   };
 
   return fmt::format("{}", fmt::join(entries, ","));
 }
 
+//
+// TODO: Decide on better names for these ?
+// TODO: Update the Android side once this is concrete !
+//
+
 const Info<std::string> MAIN_TRIFORCE_BIND_IP{{System::Main, "Core", "TriforceBindIP"}, "0.0.0.0"};
+const Info<bool> MAIN_TRIFORCE_USE_GAME_IP{{System::Main, "Core", "TriforceUseGameIP"}, true};
+const Info<bool> MAIN_TRIFORCE_BIND_OUTBOUND_TCP{{System::Main, "Core", "TriforceBindOutboundTCP"},
+                                                 true};
+
+//
+// TODO: Rename this? "TriforceNAT" "TriforceNAPT" ?
+//
 const Info<std::string> MAIN_TRIFORCE_IP_OVERRIDES{{System::Main, "Core", "TriforceIPOverrides"},
                                                    GetDefaultTriforceIPOverrides()};
 

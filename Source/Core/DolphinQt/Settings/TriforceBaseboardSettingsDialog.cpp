@@ -20,6 +20,7 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/HW/DVD/AMMediaboard.h"
 
+#include "DolphinQt/Config/ConfigControls/ConfigBool.h"
 #include "DolphinQt/QtUtils/QtUtils.h"
 
 TriforceBaseboardSettingsDialog::TriforceBaseboardSettingsDialog(QWidget* parent) : QDialog{parent}
@@ -39,13 +40,18 @@ TriforceBaseboardSettingsDialog::TriforceBaseboardSettingsDialog(QWidget* parent
   m_bind_ip_edit = new QLineEdit;
   ip_override_layout->addRow(tr("Bind IP: "), m_bind_ip_edit);
 
+  ip_override_layout->addRow(new ConfigBool{tr("Use Game IP"), Config::MAIN_TRIFORCE_USE_GAME_IP});
+
+  ip_override_layout->addRow(
+      new ConfigBool{tr("Bind Outbound TCP"), Config::MAIN_TRIFORCE_BIND_OUTBOUND_TCP});
+
   m_ip_overrides_table = new QTableWidget;
   ip_override_layout->addRow(tr("IP Overrides: "), m_ip_overrides_table);
 
   m_ip_overrides_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
   m_ip_overrides_table->setColumnCount(2);
-  m_ip_overrides_table->setHorizontalHeaderLabels({tr("Match"), tr("Replacement")});
+  m_ip_overrides_table->setHorizontalHeaderLabels({tr("Original"), tr("Replacement")});
 
   m_ip_overrides_table->setEditTriggers(QAbstractItemView::DoubleClicked |
                                         QAbstractItemView::EditKeyPressed);
