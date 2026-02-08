@@ -611,21 +611,23 @@ int CSIDevice_AMBaseboard::RunBuffer(u8* buffer, int request_length)
 
                   const u16 page = m_ic_write_buffer[5];
                   const u16 count = m_ic_write_buffer[7];
+                  const size_t write_size = static_cast<size_t>(count) * 8;
+                  const size_t write_offset = static_cast<size_t>(page) * 8;
 
-                  if ((page * 8 + count * 8) > sizeof(m_ic_card_data) ||
-                      (10 + count * 8) > sizeof(m_ic_write_buffer))
+                  if ((write_size + write_offset) > sizeof(m_ic_card_data) ||
+                      (10 + write_size) > sizeof(m_ic_write_buffer))
                   {
                     ERROR_LOG_FMT(SERIALINTERFACE_CARD,
                                   "GC-AM: Command 25 (IC-CARD) Write Pages overflow:\n"
                                   " - m_ic_card_data(offset={}, size={})\n"
                                   " - m_ic_write_buffer(offset={}, size={})\n"
                                   " - size={}, page={}, count={}\n",
-                                  page * 8, sizeof(m_ic_card_data), 10, sizeof(m_ic_write_buffer),
-                                  count * 8, page, count);
+                                  write_offset, sizeof(m_ic_card_data), 10,
+                                  sizeof(m_ic_write_buffer), write_size, page, count);
                     data_in = data_in_end;
                     break;
                   }
-                  memcpy(m_ic_card_data + page * 8, m_ic_write_buffer + 10, count * 8);
+                  memcpy(m_ic_card_data + write_offset, m_ic_write_buffer + 10, write_size);
 
                   INFO_LOG_FMT(SERIALINTERFACE_CARD,
                                "GC-AM: Command 25 (IC-CARD) Write Pages:{} Count:{}({:x})", page,
@@ -811,6 +813,8 @@ int CSIDevice_AMBaseboard::RunBuffer(u8* buffer, int request_length)
                 const u16 size = Common::swap16(data_in + 2);
                 const u16 page = Common::swap16(data_in + 6) & 0xFF;  // 255 is max page
                 const u16 count = Common::swap16(data_in + 8);
+                const size_t write_size = static_cast<size_t>(count) * 8;
+                const size_t write_offset = static_cast<size_t>(page) * 8;
 
                 // We got a complete packet
                 if (pksize - 5 == size)
@@ -821,7 +825,7 @@ int CSIDevice_AMBaseboard::RunBuffer(u8* buffer, int request_length)
                   }
                   else
                   {
-                    if (page * 8 + count * 8 > sizeof(m_ic_card_data))
+                    if (write_size + write_offset > sizeof(m_ic_card_data))
                     {
                       ERROR_LOG_FMT(
                           SERIALINTERFACE_CARD,
@@ -830,9 +834,9 @@ int CSIDevice_AMBaseboard::RunBuffer(u8* buffer, int request_length)
                     }
                     else
                     {
-                      if (!validate_data_in_out(13 + count * 8, 0, "SerialA (IC-CARD)"))
+                      if (!validate_data_in_out(13 + write_size, 0, "SerialA (IC-CARD)"))
                         break;
-                      memcpy(m_ic_card_data + page * 8, data_in + 13, count * 8);
+                      memcpy(m_ic_card_data + write_offset, data_in + 13, write_size);
                     }
                   }
 
