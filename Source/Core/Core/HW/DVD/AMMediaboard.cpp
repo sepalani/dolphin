@@ -150,6 +150,8 @@ static u8 s_network_buffer[512 * 1024];
 static u8 s_allnet_buffer[4096];
 static u8 s_allnet_settings[0x8500];
 
+static Common::IPAddress s_game_modified_ip_address;
+
 static constexpr size_t MAX_IPV4_STRING_LENGTH = 15;
 
 constexpr char s_allnet_reply[] = {
@@ -436,6 +438,8 @@ void Init()
   std::ranges::fill(s_sockets, SOCKET_ERROR);
   std::ranges::fill(s_allnet_buffer, 0);
   std::ranges::fill(s_allnet_settings, 0);
+
+  s_game_modified_ip_address = {};
 
   s_firmware_map = false;
   s_test_menu = false;
@@ -1057,6 +1061,9 @@ static void AMMBCommandModifyMyIPaddr(u32 parameter_offset, u32 network_buffer_b
                                             ip_address_offset, MAX_IPV4_STRING_LENGTH);
 
   NOTICE_LOG_FMT(AMMEDIABOARD_NET, "GC-AM: modifyMyIPaddr({})", ip_address_str);
+
+  if (const auto parse_result = Common::StringToIPv4PortRange(ip_address_str))
+    s_game_modified_ip_address = parse_result->first.ip_address;
 }
 
 static void FileWriteData(Memory::MemoryManager& memory, File::IOFile* file, u32 seek_pos,
@@ -2001,6 +2008,8 @@ void DoState(PointerWrap& p)
   p.Do(s_network_buffer);
   p.Do(s_allnet_buffer);
   p.Do(s_allnet_settings);
+
+  p.Do(s_game_modified_ip_address);
 
   // TODO: Handle the files better.
   // Data corruption is probably currently possible.
