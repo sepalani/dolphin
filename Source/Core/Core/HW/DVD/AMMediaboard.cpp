@@ -16,7 +16,6 @@
 #include "Common/FileUtil.h"
 #include "Common/IOFile.h"
 #include "Common/Logging/Log.h"
-#include "Common/Network.h"
 #include "Common/ScopeGuard.h"
 
 #include "Core/Boot/Boot.h"
@@ -212,7 +211,7 @@ static const std::unordered_map<u16, GameType> s_game_map = {{0x4747, FZeroAX},
 // Sockets FDs are required to go from 0 to 63.
 // Games use the FD as indexes so we have to workaround it.
 
-static SOCKET s_sockets[64];
+static SOCKET s_sockets[SOCKET_FD_MAX];
 
 // FYI: Changing this to 0 seems to subtly break things?
 static constexpr u32 FIRST_VALID_FD = 1;
@@ -520,57 +519,54 @@ std::optional<std::pair<std::string_view, std::string_view>> ParseIPOverride(std
   return std::nullopt;
 }
 
-struct IPAddressOverride
+// Caller should check if it matches first!
+Common::IPv4Port IPAddressOverride::ApplyOverride(Common::IPv4Port subject) const
 {
-  Common::IPv4PortRange original;
-  Common::IPv4PortRange replacement;
+  const auto replacement_first_ip_u32 = replacement.first.GetIPAddressValue();
+  const auto ip_count = 1u + u64(replacement.last.GetIPAddressValue()) - replacement_first_ip_u32;
+  const auto result_ip =
+      u32(replacement_first_ip_u32 +
+          ((subject.GetIPAddressValue() - original.first.GetIPAddressValue()) % ip_count));
 
-  // Caller should check if it matches first!
-  Common::IPv4Port ApplyOverride(Common::IPv4Port subject) const
+  Common::IPv4Port result{
+      .ip_address = std::bit_cast<Common::IPAddress>(Common::BigEndianValue(result_ip)),
+  };
+
+  const auto replacement_first_port_u16 = replacement.first.GetPortValue();
+  const auto port_count = 1u + u32(replacement.last.GetPortValue()) - replacement_first_port_u16;
+
+  if (port_count == 65536)
   {
-    const auto replacement_first_ip_u32 = replacement.first.GetIPAddressValue();
-    const auto ip_count = 1u + u64(replacement.last.GetIPAddressValue()) - replacement_first_ip_u32;
-    const auto result_ip =
-        u32(replacement_first_ip_u32 +
-            ((subject.GetIPAddressValue() - original.first.GetIPAddressValue()) % ip_count));
+    // If the replacement includes all ports then don't alter the port.
+    // This allows "1.1.1.1:80=2.2.2.2" to do the obvious thing.
+    // This logic could probably be better.
+    // Ranges of different sizes will be weird in general.
 
-    Common::IPv4Port result{
-        .ip_address = std::bit_cast<Common::IPAddress>(Common::BigEndianValue(result_ip)),
-    };
-
-    const auto replacement_first_port_u16 = replacement.first.GetPortValue();
-    const auto port_count = 1u + u32(replacement.last.GetPortValue()) - replacement_first_port_u16;
-
-    if (port_count == 65536)
-    {
-      // If the replacement includes all ports then don't alter the port.
-      // This allows "1.1.1.1:80=2.2.2.2" to do the obvious thing.
-      // This logic could probably be better.
-      // Ranges of different sizes will be weird in general.
-
-      result.port = subject.port;
-    }
-    else
-    {
-      const auto result_port =
-          u16(replacement_first_port_u16 +
-              ((subject.GetPortValue() - original.first.GetPortValue()) % port_count));
-      result.port = std::bit_cast<u16>(Common::BigEndianValue(result_port));
-    }
-
-    return result;
+    result.port = subject.port;
+  }
+  else
+  {
+    const auto result_port =
+        u16(replacement_first_port_u16 +
+            ((subject.GetPortValue() - original.first.GetPortValue()) % port_count));
+    result.port = std::bit_cast<u16>(Common::BigEndianValue(result_port));
   }
 
-  Common::IPv4Port ReverseOverride(Common::IPv4Port subject) const
-  {
-    // Low effort implementation..
-    return IPAddressOverride{.original = replacement, .replacement = original}.ApplyOverride(
-        subject);
-  }
-};
+  return result;
+}
 
-using IPOverrides = std::vector<IPAddressOverride>;
-static IPOverrides GetIPOverrides()
+Common::IPv4Port IPAddressOverride::ReverseOverride(Common::IPv4Port subject) const
+{
+  // Low effort implementation..
+  return IPAddressOverride{.original = replacement, .replacement = original}.ApplyOverride(subject);
+}
+
+std::string IPAddressOverride::ToString() const
+{
+  return fmt::format("{}={}", original.ToString(), replacement.ToString());
+}
+
+IPOverrides GetIPOverrides()
 {
   IPOverrides result;
 
@@ -2176,4 +2172,12 @@ void DoState(PointerWrap& p)
   }
 }
 
+s32 DebuggerGetSocket(u32 triforce_fd)
+{
+  if (triforce_fd < std::size(s_sockets))
+    return s32(s_sockets[triforce_fd]);
+
+  WARN_LOG_FMT(AMMEDIABOARD, "GC-AM: Bad socket fd used by the debugger: {}", triforce_fd);
+  return -1;
+}
 }  // namespace AMMediaboard

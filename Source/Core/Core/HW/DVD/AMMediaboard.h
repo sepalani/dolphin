@@ -10,6 +10,7 @@
 
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
+#include "Common/Network.h"
 
 #include "DiscIO/Volume.h"
 
@@ -230,6 +231,8 @@ enum SocketStatusCodes
   SSC_SUCCESS = 70,
 };
 
+static constexpr std::size_t SOCKET_FD_MAX = 64;
+
 void Init();
 void FirmwareMap(bool on);
 void InitDIMM(const DiscIO::Volume& volume);
@@ -241,6 +244,19 @@ bool GetTestMenu();
 void Shutdown();
 void DoState(PointerWrap& p);
 
-std::optional<std::pair<std::string_view, std::string_view>> ParseIPOverride(std::string_view str);
+struct IPAddressOverride
+{
+  Common::IPv4PortRange original;
+  Common::IPv4PortRange replacement;
 
+  // Caller should check if it matches first!
+  Common::IPv4Port ApplyOverride(Common::IPv4Port subject) const;
+  Common::IPv4Port ReverseOverride(Common::IPv4Port subject) const;
+  std::string ToString() const;
+};
+using IPOverrides = std::vector<IPAddressOverride>;
+
+IPOverrides GetIPOverrides();
+std::optional<std::pair<std::string_view, std::string_view>> ParseIPOverride(std::string_view str);
+s32 DebuggerGetSocket(u32 triforce_fd);
 };  // namespace AMMediaboard
